@@ -1,0 +1,10 @@
+2026-08-23 18:21:04 | {
+    "ph_up":  false,
+    "water_raw":  2800,
+    "ph_down":  false,
+    "ph":  6.2,
+    "ph_raw":  1800,
+    "device_uid":  "ESP32-HYDRO-001",
+    "nutrient_b":  false,
+    "nutrient_a":  false
+}

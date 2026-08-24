@@ -1,0 +1,485 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+
+import "../css/login.css";
+
+function Login({ onLogin }) {
+
+    const navigate = useNavigate();
+
+    const [showPassword, setShowPassword] = useState(false);
+
+    const [formData, setFormData] = useState({
+        email: "",
+        password: ""
+    });
+
+    const [rememberMe, setRememberMe] = useState(false);
+
+    const [error, setError] = useState("");
+
+    const handleChange = (e) => {
+
+        const { name, value } = e.target;
+
+        setFormData((prev) => ({
+            ...prev,
+            [name]: value
+        }));
+
+        setError("");
+    };
+
+    const API_URL = "http://localhost:8000/api/login.php";
+
+const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (!formData.email || !formData.password) {
+        setError("Please enter your email and password.");
+        return;
+    }
+
+    setError("");
+
+    try {
+        const response = await fetch(API_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                email: formData.email,
+                password: formData.password,
+                rememberMe: rememberMe
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+            setError(data.message || "Invalid email or password.");
+            return;
+        }
+
+        const user = data.user;
+
+        if (onLogin) {
+            onLogin(user);
+        }
+
+        if (rememberMe) {
+            localStorage.setItem(
+                "hydrocontrol_user",
+                JSON.stringify(user)
+            );
+        } else {
+            sessionStorage.setItem(
+                "hydrocontrol_user",
+                JSON.stringify(user)
+            );
+        }
+
+        navigate("/dashboard");
+
+    } catch (error) {
+        console.error("Login error:", error);
+
+        setError(
+            "Unable to connect to the HydroControl server."
+        );
+    }
+};
+
+    return (
+
+        <div className="login-page">
+
+            {/* =====================================================
+                BACKGROUND DECORATION
+            ====================================================== */}
+
+            <div className="login-background">
+
+                <div className="login-orb orb-one"></div>
+                <div className="login-orb orb-two"></div>
+                <div className="login-orb orb-three"></div>
+
+                <div className="login-grid"></div>
+
+            </div>
+
+
+            {/* =====================================================
+                LOGIN CONTAINER
+            ====================================================== */}
+
+            <main className="login-container">
+
+                {/* =================================================
+                    BRAND SECTION
+                ================================================== */}
+
+                <section className="login-brand">
+
+                    <div className="brand-logo">
+
+                        <div className="brand-logo-inner">
+                            🌱
+                        </div>
+
+                    </div>
+
+                    <span className="brand-label">
+                        SMART HYDROPONIC SYSTEM
+                    </span>
+
+                    <h1>
+                        Hydro<span>Control</span>
+                    </h1>
+
+                    <p>
+                        Monitor, control, and optimize your
+                        hydroponic growing environment.
+                    </p>
+
+
+                    {/* SYSTEM STATUS */}
+
+                    <div className="login-system-status">
+
+                        <span className="status-dot"></span>
+
+                        <div>
+
+                            <strong>
+                                System Online
+                            </strong>
+
+                            <small>
+                                ESP32 controller ready
+                            </small>
+
+                        </div>
+
+                    </div>
+
+
+                    {/* FEATURES */}
+
+                    <div className="login-features">
+
+                        <div className="login-feature">
+
+                            <span>
+                                💧
+                            </span>
+
+                            <div>
+                                <strong>
+                                    Water
+                                </strong>
+
+                                <small>
+                                    Monitoring
+                                </small>
+                            </div>
+
+                        </div>
+
+
+                        <div className="login-feature">
+
+                            <span>
+                                🧪
+                            </span>
+
+                            <div>
+                                <strong>
+                                    Nutrients
+                                </strong>
+
+                                <small>
+                                    Control
+                                </small>
+                            </div>
+
+                        </div>
+
+
+                        <div className="login-feature">
+
+                            <span>
+                                ⚗️
+                            </span>
+
+                            <div>
+                                <strong>
+                                    pH
+                                </strong>
+
+                                <small>
+                                    Management
+                                </small>
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </section>
+
+
+                {/* =================================================
+                    LOGIN CARD
+                ================================================== */}
+
+                <section className="login-card">
+
+                    <div className="login-card-header">
+
+                        <div className="mobile-login-logo">
+                            🌱
+                        </div>
+
+                        <span className="login-card-label">
+                            ADMIN PORTAL
+                        </span>
+
+                        <h2>
+                            Welcome Back
+                        </h2>
+
+                        <p>
+                            Sign in to access your HydroControl
+                            dashboard.
+                        </p>
+
+                    </div>
+
+
+                    {/* ERROR */}
+
+                    {error && (
+
+                        <div className="login-error">
+
+                            <span>
+                                ⚠
+                            </span>
+
+                            {error}
+
+                        </div>
+
+                    )}
+
+
+                    {/* =================================================
+                        FORM
+                    ================================================== */}
+
+                    <form onSubmit={handleSubmit}>
+
+                        {/* EMAIL */}
+
+                        <div className="form-group">
+
+                            <label htmlFor="email">
+                                EMAIL ADDRESS
+                            </label>
+
+                            <div className="input-wrapper">
+
+                                <span className="input-icon">
+                                    ✉
+                                </span>
+
+                                <input
+                                    id="email"
+                                    name="email"
+                                    type="email"
+                                    placeholder="admin@hydrocontrol.com"
+                                    value={formData.email}
+                                    onChange={handleChange}
+                                    autoComplete="email"
+                                />
+
+                            </div>
+
+                        </div>
+
+
+                        {/* PASSWORD */}
+
+                        <div className="form-group">
+
+                            <div className="password-label-row">
+
+                                <label htmlFor="password">
+                                    PASSWORD
+                                </label>
+                            </div>
+
+                            <div className="input-wrapper">
+
+                                <span className="input-icon">
+                                    🔒
+                                </span>
+
+                                <input
+                                    id="password"
+                                    name="password"
+                                    type={
+                                        showPassword
+                                            ? "text"
+                                            : "password"
+                                    }
+                                    placeholder="Enter your password"
+                                    value={formData.password}
+                                    onChange={handleChange}
+                                    autoComplete="current-password"
+                                />
+
+                                <button
+                                    type="button"
+                                    className="password-toggle"
+                                    onClick={() =>
+                                        setShowPassword(
+                                            !showPassword
+                                        )
+                                    }
+                                    aria-label={
+                                        showPassword
+                                            ? "Hide password"
+                                            : "Show password"
+                                    }
+                                >
+                                    {showPassword ? "🙈" : "👁"}
+                                </button>
+
+                            </div>
+
+                        </div>
+
+
+                        {/* OPTIONS */}
+
+                        <div className="login-options">
+
+                            <label className="remember-option">
+
+                                <input
+                                    type="checkbox"
+                                    checked={rememberMe}
+                                    onChange={(e) =>
+                                        setRememberMe(
+                                            e.target.checked
+                                        )
+                                    }
+                                />
+
+                                <span className="custom-checkbox"></span>
+
+                                Remember me
+
+                            </label>
+
+                        </div>
+
+
+                        {/* LOGIN */}
+
+                        <button
+                            type="submit"
+                            className="login-button"
+                        >
+
+                            <span>
+                                Sign In
+                            </span>
+
+                            <span className="login-arrow">
+                                →
+                            </span>
+
+                        </button>
+
+                    </form>
+
+
+                    {/* DIVIDER */}
+
+                    <div className="login-divider">
+
+                        <span>
+                            SECURE ACCESS
+                        </span>
+
+                    </div>
+
+
+                    {/* SECURITY */}
+
+                    <div className="security-info">
+
+                        <div className="security-icon">
+                            🛡️
+                        </div>
+
+                        <div>
+
+                            <strong>
+                                Secure Authentication
+                            </strong>
+
+                            <span>
+                                Your connection is protected
+                                by HydroControl security.
+                            </span>
+
+                        </div>
+
+                    </div>
+
+
+                    {/* VERSION */}
+
+                    <div className="login-version">
+
+                        HydroControl
+                        <span>•</span>
+                        v1.0.0
+
+                    </div>
+
+                </section>
+
+            </main>
+
+
+            {/* =====================================================
+                FOOTER
+            ====================================================== */}
+
+            <footer className="login-footer">
+
+                <span>
+                    © 2026 HydroControl
+                </span>
+
+                <span>
+                    Smart Hydroponic Monitoring & Control System
+                </span>
+
+                <span>
+                    ESP32 Connected
+                </span>
+
+            </footer>
+
+        </div>
+    );
+}
+
+export default Login;

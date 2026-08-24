@@ -1,0 +1,8 @@
+# Wokwi Library List
+# See https://docs.wokwi.com/guides/libraries
+
+Potentiometer_ADI_Arduino
+WiFi
+HttpClient
+
+LiquidCrystal I2C
