@@ -65,7 +65,7 @@ const fetchData = async () => {
           <tr>
             <th>Timestamp</th>
             <th>pH Level</th>
-            <th>Water Level (%)</th>
+            <th>Water Level</th>
             <th>Relay Status</th>
           </tr>
         </thead>
