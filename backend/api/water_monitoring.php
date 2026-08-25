@@ -358,7 +358,7 @@ try {
 
         ORDER BY sr.recorded_at DESC
 
-        LIMIT 20
+        LIMIT 5
     ";
 
     $historyStatement = $pdo->query($historyQuery);

@@ -290,7 +290,7 @@ try {
             created_at
         FROM ph_history
         ORDER BY created_at DESC
-        LIMIT 20
+        LIMIT 5
     ");
 
     $stmt->execute();
@@ -358,7 +358,7 @@ try {
         |--------------------------------------------------------------------------
         */
 
-        $time = date(
+        $times = date(
             "h:i A",
             strtotime($row["created_at"])
         );
@@ -375,7 +375,7 @@ try {
                 (int) $row["id"],
 
             "time" =>
-                $time,
+                $times,
 
             "ph" =>
                 (float) $row["ph_value"],
@@ -398,10 +398,7 @@ try {
                 $status,
 
             "status_code" =>
-                $row["status"],
-
-            "created_at" =>
-                $row["created_at"]
+                $row["status"]
         ];
     }
 

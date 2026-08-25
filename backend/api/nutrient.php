@@ -260,7 +260,7 @@ try {
                 created_at
             FROM ph_history
             ORDER BY created_at DESC
-            LIMIT 20
+            LIMIT 5
         ");
 
         $historyRows =

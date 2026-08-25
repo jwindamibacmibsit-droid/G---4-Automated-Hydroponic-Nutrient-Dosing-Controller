@@ -55,7 +55,7 @@ function Navbar({ isOpen, setIsOpen }) {
         }
 
         // Redirect to login
-        navigate("/login", {
+        navigate("/", {
             replace: true
         });
     };

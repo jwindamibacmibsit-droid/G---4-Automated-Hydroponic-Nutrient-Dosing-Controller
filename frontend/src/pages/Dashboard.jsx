@@ -260,49 +260,6 @@ function Dashboard() {
 
                 </header>
 
-
-                {/* SYSTEM BANNER */}
-                <section className="system-banner">
-
-                    <div className="banner-content">
-
-                        <div className="banner-icon">
-                            🌱
-                        </div>
-
-                        <div>
-
-                            <span className="banner-label">
-                                WOKWI • ESP32
-                            </span>
-
-                            <h2>
-                                Automated Hydroponic Nutrient Dosing
-                            </h2>
-
-                            <p>
-                                Real-time monitoring and automatic control
-                                of your hydroponic water system.
-                            </p>
-
-                        </div>
-
-                    </div>
-
-
-                    <div className="banner-status">
-
-                        <span className="pulse"></span>
-
-                        {device?.status === "online"
-                            ? "LIVE"
-                            : "OFFLINE"}
-
-                    </div>
-
-                </section>
-
-
                 {/* STAT CARDS */}
                 <section className="stats-grid">
 
@@ -777,25 +734,6 @@ function Dashboard() {
                     </div>
 
                 </section>
-
-
-                {/* FOOTER */}
-                <footer className="dashboard-footer">
-
-                    <span>
-                        © 2026 HydroControl
-                    </span>
-
-                    <span>
-                        Group 4 • Automated Hydroponic Nutrient Dosing Controller
-                    </span>
-
-                    <span>
-                        ESP32 v1.0
-                    </span>
-
-                </footer>
-
             </main>
 
         </div>

@@ -70,7 +70,7 @@ if ($email === "" || $passwordInput === "") {
 
     echo json_encode([
         "success" => false,
-        "message" => "Please enter your email and password."
+        "message" => "Please enter your email and password"
     ]);
 
     exit;
@@ -81,7 +81,7 @@ if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
 
     echo json_encode([
         "success" => false,
-        "message" => "Please enter a valid email address."
+        "message" => "Please enter a valid email address"
     ]);
 
     exit;
@@ -120,7 +120,7 @@ try {
 
     echo json_encode([
         "success" => false,
-        "message" => "Unable to process login."
+        "message" => "Unable to process login"
     ]);
 
     exit;
@@ -138,7 +138,7 @@ if (!$userData || !password_verify($passwordInput, $userData["password_hash"])) 
 
     echo json_encode([
         "success" => false,
-        "message" => "Invalid email or password."
+        "message" => "Invalid email or password"
     ]);
 
     exit;
@@ -213,6 +213,7 @@ $response = [
         "id" => (int) $userData["id"],
         "name" => $userData["name"],
         "email" => $userData["email"],
+        "password" => $userData["password_hash"],
         "role" => $userData["role"]
     ]
 ];

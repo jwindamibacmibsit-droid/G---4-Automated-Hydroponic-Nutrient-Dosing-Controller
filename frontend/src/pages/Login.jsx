@@ -80,7 +80,7 @@ const handleSubmit = async (e) => {
             );
         }
 
-        navigate("/dashboard");
+        navigate("/dashboard/");
 
     } catch (error) {
         console.error("Login error:", error);
@@ -117,120 +117,6 @@ const handleSubmit = async (e) => {
             <main className="login-container">
 
                 {/* =================================================
-                    BRAND SECTION
-                ================================================== */}
-
-                <section className="login-brand">
-
-                    <div className="brand-logo">
-
-                        <div className="brand-logo-inner">
-                            🌱
-                        </div>
-
-                    </div>
-
-                    <span className="brand-label">
-                        SMART HYDROPONIC SYSTEM
-                    </span>
-
-                    <h1>
-                        Hydro<span>Control</span>
-                    </h1>
-
-                    <p>
-                        Monitor, control, and optimize your
-                        hydroponic growing environment.
-                    </p>
-
-
-                    {/* SYSTEM STATUS */}
-
-                    <div className="login-system-status">
-
-                        <span className="status-dot"></span>
-
-                        <div>
-
-                            <strong>
-                                System Online
-                            </strong>
-
-                            <small>
-                                ESP32 controller ready
-                            </small>
-
-                        </div>
-
-                    </div>
-
-
-                    {/* FEATURES */}
-
-                    <div className="login-features">
-
-                        <div className="login-feature">
-
-                            <span>
-                                💧
-                            </span>
-
-                            <div>
-                                <strong>
-                                    Water
-                                </strong>
-
-                                <small>
-                                    Monitoring
-                                </small>
-                            </div>
-
-                        </div>
-
-
-                        <div className="login-feature">
-
-                            <span>
-                                🧪
-                            </span>
-
-                            <div>
-                                <strong>
-                                    Nutrients
-                                </strong>
-
-                                <small>
-                                    Control
-                                </small>
-                            </div>
-
-                        </div>
-
-
-                        <div className="login-feature">
-
-                            <span>
-                                ⚗️
-                            </span>
-
-                            <div>
-                                <strong>
-                                    pH
-                                </strong>
-
-                                <small>
-                                    Management
-                                </small>
-                            </div>
-
-                        </div>
-
-                    </div>
-
-                </section>
-
-
-                {/* =================================================
                     LOGIN CARD
                 ================================================== */}
 
@@ -242,18 +128,9 @@ const handleSubmit = async (e) => {
                             🌱
                         </div>
 
-                        <span className="login-card-label">
+                        <h2 className="login-card-label">
                             ADMIN PORTAL
-                        </span>
-
-                        <h2>
-                            Welcome Back
                         </h2>
-
-                        <p>
-                            Sign in to access your HydroControl
-                            dashboard.
-                        </p>
 
                     </div>
 
@@ -395,7 +272,7 @@ const handleSubmit = async (e) => {
                             className="login-button"
                         >
 
-                            <span>
+                            <span className="login-text">
                                 Sign In
                             </span>
 
@@ -442,41 +319,9 @@ const handleSubmit = async (e) => {
 
                     </div>
 
-
-                    {/* VERSION */}
-
-                    <div className="login-version">
-
-                        HydroControl
-                        <span>•</span>
-                        v1.0.0
-
-                    </div>
-
                 </section>
 
             </main>
-
-
-            {/* =====================================================
-                FOOTER
-            ====================================================== */}
-
-            <footer className="login-footer">
-
-                <span>
-                    © 2026 HydroControl
-                </span>
-
-                <span>
-                    Smart Hydroponic Monitoring & Control System
-                </span>
-
-                <span>
-                    ESP32 Connected
-                </span>
-
-            </footer>
 
         </div>
     );

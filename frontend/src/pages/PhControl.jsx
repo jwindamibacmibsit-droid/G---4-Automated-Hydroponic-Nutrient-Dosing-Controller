@@ -427,21 +427,9 @@ function PhControl() {
 
                         <div>
 
-                            <div className="ph-breadcrumb">
-                                HYDROCONTROL / CONTROL / PH
-                            </div>
-
                             <h1>
                                 pH Control
                             </h1>
-
-                            <p>
-                                Monitor and automatically
-                                maintain the ideal pH
-                                balance of your hydroponic
-                                system.
-                            </p>
-
                         </div>
 
                     </div>
@@ -1251,11 +1239,12 @@ function PhControl() {
                                 ) : (
 
                                     history.map(
-                                        (reading) => (
+                                        (reading, index) => (
 
                                             <tr
                                                 key={
-                                                    reading.id
+                                                    reading.id ||
+                                                    index
                                                 }
                                             >
 
@@ -1481,28 +1470,6 @@ function PhControl() {
 
                 </section>
 
-                {/* =====================================================
-                    FOOTER
-                ====================================================== */}
-
-                <footer className="ph-footer">
-
-                    <span>
-                        © 2026 HydroControl
-                    </span>
-
-                    <span>
-                        pH Control System • ESP32
-                    </span>
-
-                    <span>
-                        System Status:{" "}
-                        {deviceOnline
-                            ? "Online"
-                            : "Offline"}
-                    </span>
-
-                </footer>
 
             </main>
 

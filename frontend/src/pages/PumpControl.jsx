@@ -102,17 +102,7 @@ function PumpControl() {
 
                         <div>
 
-                            <div className="pump-breadcrumb">
-                                HYDROCONTROL / CONTROL
-                            </div>
-
                             <h1>Pump Control</h1>
-
-                            <p>
-                                Manage circulation and nutrient dosing
-                                pumps in real time.
-                            </p>
-
                         </div>
 
                     </div>

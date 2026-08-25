@@ -34,18 +34,7 @@ function About() {
                         </button>
 
                         <div>
-
-                            <div className="about-breadcrumb">
-                                HYDROCONTROL / INFORMATION
-                            </div>
-
                             <h1>About HydroControl</h1>
-
-                            <p>
-                                Learn more about the smart hydroponic
-                                monitoring and control platform.
-                            </p>
-
                         </div>
 
                     </div>

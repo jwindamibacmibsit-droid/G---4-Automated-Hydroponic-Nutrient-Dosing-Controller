@@ -370,7 +370,7 @@ try {
 
         ORDER BY al.created_at DESC
 
-        LIMIT 10
+        LIMIT 5
     ";
 
     $activityStatement = $pdo->query($activityQuery);

@@ -24,6 +24,7 @@
         15px 0 40px rgba(0, 0, 0, 0.28),
         inset -1px 0 rgba(255,255,255,0.05);
     overflow-y: auto;
+    scrollbar-width: none;
 }
 
 
@@ -139,7 +140,7 @@
     padding: 0 13px;
     color: #91ada4;
     text-decoration: none;
-    border-radius: 13px;
+    border-radius: 10px;
     font-size: 13px;
     font-weight: 600;
     transition: 0.25s ease;
@@ -328,13 +329,11 @@
 
 .sidebar-logout:hover {
 
+    background: rgba(255,255,255,0.06);
     transform: translateX(3px);
 
-    border-color: #f1dddd;
 
-    background: #fff5f5;
-
-    color: #c45d5d;
+    color: #ffffff;
 }
 
 .sidebar-logout:hover .sidebar-icon {

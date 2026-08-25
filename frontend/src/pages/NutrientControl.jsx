@@ -409,19 +409,9 @@ function NutrientControl() {
 
                         <div>
 
-                            <div className="nutrient-breadcrumb">
-                                HYDROCONTROL / CONTROL
-                            </div>
-
                             <h1>
                                 Nutrient Control
                             </h1>
-
-                            <p>
-                                Monitor and control nutrient
-                                dosing, pH balance, and EC levels.
-                            </p>
-
                         </div>
 
                     </div>
@@ -1417,30 +1407,6 @@ function NutrientControl() {
                     </div>
 
                 </section>
-
-                {/* FOOTER */}
-
-                <footer className="nutrient-footer">
-
-                    <span>
-                        © 2026 HydroControl
-                    </span>
-
-                    <span>
-                        Nutrient Control System • ESP32
-                    </span>
-
-                    <span>
-
-                        System Status:{" "}
-
-                        {systemOnline
-                            ? "Online"
-                            : "Offline"}
-
-                    </span>
-
-                </footer>
 
             </main>
 

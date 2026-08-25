@@ -323,22 +323,9 @@ function WaterMonitoring() {
 
 
                         <div>
-
-                            <div className="page-breadcrumb">
-                                HYDROCONTROL / MONITORING
-                            </div>
-
-
                             <h1>
                                 Water Monitoring
                             </h1>
-
-
-                            <p>
-                                Real-time monitoring of your hydroponic
-                                reservoir and water conditions.
-                            </p>
-
                         </div>
 
                     </div>
@@ -984,32 +971,6 @@ function WaterMonitoring() {
                     </div>
 
                 </section>
-
-
-                {/* FOOTER */}
-
-                <footer className="water-footer">
-
-                    <span>
-                        © 2026 HydroControl
-                    </span>
-
-
-                    <span>
-                        Water Monitoring System • ESP32
-                    </span>
-
-
-                    <span>
-                        System Status: {
-                            system?.status === "online"
-                                ? "Online"
-                                : "Offline"
-                        }
-                    </span>
-
-                </footer>
-
             </main>
 
         </div>
