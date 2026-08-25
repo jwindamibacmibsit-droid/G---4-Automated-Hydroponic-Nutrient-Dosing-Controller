@@ -30,7 +30,7 @@ function Login({ onLogin }) {
         setError("");
     };
 
-    const API_URL = "http://localhost:8000/api/login.php";
+    const API_URL = "https://hydroponic-controller.vercel.app/api/login.php";
 
 const handleSubmit = async (e) => {
     e.preventDefault();
