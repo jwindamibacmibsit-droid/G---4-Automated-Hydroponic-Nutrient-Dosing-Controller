@@ -10,7 +10,7 @@ const char* WIFI_PASSWORD = "";
 
 // PHP API running on your PC
 const char* API_URL =
-    "http://host.wokwi.internal:8000/api/esp.php";
+    "http://localhost:8000/api/esp.php";
 
 // ---------------- Pin Definitions ----------------
 
