@@ -1,9 +1,7 @@
 import { NavLink, useNavigate } from "react-router-dom";
-
 import "../css/navbar.css";
 
 function Navbar({ isOpen, setIsOpen }) {
-
     const navigate = useNavigate();
 
     const menuItems = [
@@ -39,36 +37,30 @@ function Navbar({ isOpen, setIsOpen }) {
         }
     ];
 
-    /* =====================================================
-       LOGOUT
-    ====================================================== */
-
+    // =====================================================
+    // LOGOUT
+    // =====================================================
     const handleLogout = () => {
-
         // Remove saved login information
         localStorage.removeItem("hydrocontrol_user");
         sessionStorage.removeItem("hydrocontrol_user");
 
-        // Close sidebar on mobile
+        // Close sidebar
         if (setIsOpen) {
             setIsOpen(false);
         }
 
-        // Redirect to login
+        // Redirect to login page
         navigate("/", {
             replace: true
         });
     };
 
-
     return (
-
         <>
-
             {/* =================================================
                 OVERLAY
             ================================================== */}
-
             {isOpen && (
                 <div
                     className="sidebar-overlay"
@@ -76,38 +68,25 @@ function Navbar({ isOpen, setIsOpen }) {
                 />
             )}
 
-
             {/* =================================================
                 SIDEBAR
             ================================================== */}
-
             <aside
                 className={`sidebar ${
                     isOpen ? "sidebar-open" : ""
                 }`}
             >
-
-
                 {/* =================================================
                     LOGO
                 ================================================== */}
-
                 <div className="sidebar-logo">
-
                     <div className="sidebar-logo-icon">
                         🌱
                     </div>
 
                     <div className="sidebar-logo-text">
-
-                        <h2>
-                            HydroControl
-                        </h2>
-
-                        <span>
-                            ESP32 SYSTEM
-                        </span>
-
+                        <h2>HydroControl</h2>
+                        <span>ESP32 SYSTEM</span>
                     </div>
 
                     <button
@@ -117,130 +96,92 @@ function Navbar({ isOpen, setIsOpen }) {
                     >
                         ×
                     </button>
-
                 </div>
+
                 {/* =================================================
                     NAVIGATION
                 ================================================== */}
-
                 <div className="sidebar-section-title">
                     MAIN MENU
                 </div>
 
                 <nav className="sidebar-menu">
-
                     {menuItems.map((item) => (
-
                         <NavLink
                             key={item.path}
                             to={item.path}
                             className={({ isActive }) =>
                                 `sidebar-link ${
-                                    isActive
-                                        ? "active"
-                                        : ""
+                                    isActive ? "active" : ""
                                 }`
                             }
-                            onClick={() =>
-                                setIsOpen(false)
-                            }
+                            onClick={() => setIsOpen(false)}
                         >
-
                             <span className="sidebar-icon">
                                 {item.icon}
                             </span>
 
-                            <span>
-                                {item.name}
-                            </span>
-
+                            <span>{item.name}</span>
                         </NavLink>
-
                     ))}
-
                 </nav>
-
 
                 {/* =================================================
                     SYSTEM
                 ================================================== */}
-
                 <div className="sidebar-bottom">
-
                     <div className="sidebar-section-title">
                         SYSTEM
                     </div>
-
 
                     <NavLink
                         to="/settings"
                         className={({ isActive }) =>
                             `sidebar-link ${
-                                isActive
-                                    ? "active"
-                                    : ""
+                                isActive ? "active" : ""
                             }`
                         }
-                        onClick={() =>
-                            setIsOpen(false)
-                        }
+                        onClick={() => setIsOpen(false)}
                     >
-
                         <span className="sidebar-icon">
                             ⚙
                         </span>
 
                         Settings
-
                     </NavLink>
-
 
                     <NavLink
                         to="/about"
                         className={({ isActive }) =>
                             `sidebar-link ${
-                                isActive
-                                    ? "active"
-                                    : ""
+                                isActive ? "active" : ""
                             }`
                         }
-                        onClick={() =>
-                            setIsOpen(false)
-                        }
+                        onClick={() => setIsOpen(false)}
                     >
-
                         <span className="sidebar-icon">
                             ⓘ
                         </span>
 
                         About System
-
                     </NavLink>
-
 
                     {/* =================================================
                         LOGOUT
                     ================================================== */}
-
                     <button
                         type="button"
                         className="sidebar-logout"
                         onClick={handleLogout}
                     >
-
                         <span className="sidebar-icon">
                             ↪
                         </span>
 
-                        <span>
-                            Logout
-                        </span>
-
+                        <span>Logout</span>
                     </button>
-
                 </div>
             </aside>
-
         </>
     );
 }
