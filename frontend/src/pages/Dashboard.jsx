@@ -248,7 +248,6 @@ function Dashboard() {
                                 <span className="tank-measure mid">50%</span>
                                 <span className="tank-measure bottom">0%</span>
                             </div>
-                            <div className="tank-base">HYDRO RESERVOIR</div>
                         </div>
 
                         <div className="grow-rack">

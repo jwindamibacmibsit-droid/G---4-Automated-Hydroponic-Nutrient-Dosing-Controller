@@ -2,49 +2,29 @@ const pool = require("../config/database");
 const bcrypt = require("bcrypt");
 
 const login = async (req, res) => {
+    const { email, password } = req.body;
+
     try {
-        const { email, password } = req.body;
-
-        // Validate input type
-        if (
-            typeof email !== "string" ||
-            typeof password !== "string"
-        ) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid request."
-            });
-        }
-
-        // Basic length limits
-        if (
-            email.length > 254 ||
-            password.length > 128
-        ) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid email or password."
-            });
-        }
-
-        const normalizedEmail = email.trim().toLowerCase();
-
-        if (!normalizedEmail) {
+        if (!email || !password) {
             return res.status(400).json({
                 success: false,
                 message: "Email and password are required."
             });
         }
 
-        // Parameterized query protects against SQL injection
         const result = await pool.query(
             `
-            SELECT id, email, password_hash
+            SELECT
+                id,
+                name,
+                email,
+                password_hash,
+                role
             FROM users
             WHERE email = $1
             LIMIT 1
             `,
-            [normalizedEmail]
+            [email]
         );
 
         if (result.rows.length === 0) {
@@ -68,22 +48,67 @@ const login = async (req, res) => {
             });
         }
 
+        // ==========================================
+        // UPDATE LAST LOGIN
+        // ==========================================
+
+        await pool.query(
+            `
+            UPDATE users
+            SET
+                last_login = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = $1
+            `,
+            [user.id]
+        );
+
+        // ==========================================
+        // RECORD SUCCESSFUL LOGIN
+        // ==========================================
+
+        await pool.query(
+            `
+            INSERT INTO system_logs
+            (
+                user_id,
+                level,
+                category,
+                event,
+                details
+            )
+            VALUES ($1, $2, $3, $4, $5)
+            `,
+            [
+                user.id,
+                "SUCCESS",
+                "AUTH",
+                "User login successful",
+                `User ${user.email} logged into HydroControl.`
+            ]
+        );
+
+        // ==========================================
+        // LOGIN RESPONSE
+        // ==========================================
+
         return res.status(200).json({
             success: true,
             message: "Login successful.",
             user: {
                 id: user.id,
-                email: user.email
+                name: user.name,
+                email: user.email,
+                role: user.role
             }
         });
-    } catch (error) {
-        // Log the real error server-side
-        console.error("Login error:", error);
 
-        // Do not expose database/internal details
+    } catch (error) {
+        console.error("LOGIN ERROR:", error);
+
         return res.status(500).json({
             success: false,
-            message: "Internal server error."
+            message: "Login failed."
         });
     }
 };

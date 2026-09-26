@@ -5,12 +5,17 @@ const rateLimit = require("express-rate-limit");
 
 const app = express();
 
+// Hide Express information
 app.disable("x-powered-by");
 
-// Security headers
+// ============================================================
+// SECURITY HEADERS
+// ============================================================
 app.use(helmet());
 
-// Block ?url=
+// ============================================================
+// BLOCK ?url= QUERY PARAMETER
+// ============================================================
 app.use((req, res, next) => {
     if (req.query.url !== undefined) {
         return res.status(403).json({
@@ -22,7 +27,9 @@ app.use((req, res, next) => {
     next();
 });
 
-// Block sensitive files
+// ============================================================
+// BLOCK SENSITIVE FILES
+// ============================================================
 app.use((req, res, next) => {
     const path = req.path.toLowerCase();
 
@@ -42,28 +49,35 @@ app.use((req, res, next) => {
     next();
 });
 
+// ============================================================
 // CORS
+// ============================================================
 app.use(
     cors({
         origin: "http://localhost:5173",
-        methods: ["GET", "POST", "PUT", "DELETE"],
+        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         credentials: true
     })
 );
 
-// Limit JSON request size
+// ============================================================
+// JSON BODY LIMIT
+// ============================================================
 app.use(
     express.json({
         limit: "10kb"
     })
 );
 
-// General API rate limit
+// ============================================================
+// RATE LIMITING
+// ============================================================
 const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
     limit: 300,
     standardHeaders: "draft-7",
     legacyHeaders: false,
+
     message: {
         success: false,
         message: "Too many requests. Please try again later."
@@ -72,18 +86,38 @@ const apiLimiter = rateLimit({
 
 app.use("/api", apiLimiter);
 
-// Routes
-app.use("/api/auth", require("./routes/authRoutes"));
-app.use("/api/sensors", require("./routes/sensorRoutes"));
+// ============================================================
+// IMPORT ROUTES
+// ============================================================
+const authRoutes = require("./routes/authRoutes");
+const sensorRoutes = require("./routes/sensorRoutes");
+const logRoutes = require("./routes/logRoutes");
 
-// Root
+// Debug check
+console.log("authRoutes:", typeof authRoutes);
+console.log("sensorRoutes:", typeof sensorRoutes);
+console.log("logRoutes:", typeof logRoutes);
+
+// ============================================================
+// API ROUTES
+// ============================================================
+app.use("/api/auth", authRoutes);
+app.use("/api/sensors", sensorRoutes);
+app.use("/api/logs", logRoutes);
+
+// ============================================================
+// ROOT
+// ============================================================
 app.get("/", (req, res) => {
     res.json({
+        success: true,
         message: "HydroControl backend is running!"
     });
 });
 
-// 404
+// ============================================================
+// 404 HANDLER
+// ============================================================
 app.use((req, res) => {
     res.status(404).json({
         success: false,
@@ -91,7 +125,9 @@ app.use((req, res) => {
     });
 });
 
-// Error handler
+// ============================================================
+// ERROR HANDLER
+// ============================================================
 app.use((err, req, res, next) => {
     console.error("Server error:", err);
 
@@ -101,7 +137,10 @@ app.use((err, req, res, next) => {
     });
 });
 
-const PORT = 5000;
+// ============================================================
+// START SERVER
+// ============================================================
+const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);
