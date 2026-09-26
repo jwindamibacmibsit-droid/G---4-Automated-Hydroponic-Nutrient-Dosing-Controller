@@ -101,7 +101,7 @@ console.log("logRoutes:", typeof logRoutes);*/
 // ============================================================
 // API ROUTES
 // ============================================================
-app.use("/api/auth/login", authRoutes);
+app.use("/api/auth", authRoutes);
 app.use("/api/sensors", sensorRoutes);
 app.use("/api/logs", logRoutes);
 
@@ -140,8 +140,4 @@ app.use((err, req, res, next) => {
 // ============================================================
 // START SERVER
 // ============================================================
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-});
+module.exports = app;

@@ -7,13 +7,11 @@ const { login } = require("../controllers/authController");
 // ============================================================
 // POST /api/auth/login
 // ============================================================
-
-router.post("/api/auth/login", login);
+router.post("/login", login);
 
 // ============================================================
 // GET /api/auth
 // ============================================================
-
 router.get("/", (req, res) => {
     res.json({
         success: true,
