@@ -8,7 +8,7 @@ const { login } = require("../controllers/authController");
 // POST /api/auth/login
 // ============================================================
 
-router.post("/login", login);
+router.post("/api/auth/login", login);
 
 // ============================================================
 // GET /api/auth
