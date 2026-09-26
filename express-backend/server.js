@@ -101,7 +101,7 @@ console.log("logRoutes:", typeof logRoutes);*/
 // ============================================================
 // API ROUTES
 // ============================================================
-app.use("/api/auth", authRoutes);
+app.use("/api/auth/login", authRoutes);
 app.use("/api/sensors", sensorRoutes);
 app.use("/api/logs", logRoutes);
 
