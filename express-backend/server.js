@@ -54,7 +54,7 @@ app.use((req, res, next) => {
 // ============================================================
 app.use(
     cors({
-        origin: "https://hydrocontrol-seven.vercel.app/",
+        origin: "https://hydrocontrol-seven.vercel.app",
         methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         credentials: true
     })
