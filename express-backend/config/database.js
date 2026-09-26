@@ -19,4 +19,4 @@ const pool = new Pool({
     query_timeout: 5000
 });
 
-module.exports = pool;
+module.exports = pool;  
