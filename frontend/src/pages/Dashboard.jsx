@@ -185,9 +185,7 @@ function Dashboard() {
 
                 <header className="dashboard-header">
                     <div className="header-copy">
-                        <div className="dashboard-breadcrumb">HYDROCONTROL / CONTROL CENTER</div>
                         <h1>Hydroponic Environment</h1>
-                        <p>Real-time visibility into your reservoir, nutrients, water quality and automation.</p>
                     </div>
 
                     <div className={`system-status ${offline ? "is-offline" : ""}`}>
