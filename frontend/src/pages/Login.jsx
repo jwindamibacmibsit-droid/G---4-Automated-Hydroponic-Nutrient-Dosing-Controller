@@ -205,7 +205,7 @@ function Login({ onLogin }) {
                                             : "Show password"
                                     }
                                 >
-                                    {showPassword ? "🙈" : "👁"}
+                                    {showPassword ? "--" : "👁"}
                                 </button>
 
                             </div>
@@ -262,29 +262,6 @@ function Login({ onLogin }) {
                             SECURE ACCESS
                         </span>
                     </div>
-
-                    {/* SECURITY */}
-                    <div className="security-info">
-
-                        <div className="security-icon">
-                            🛡️
-                        </div>
-
-                        <div>
-
-                            <strong>
-                                Secure Authentication
-                            </strong>
-
-                            <span>
-                                Your connection is protected
-                                by HydroControl security.
-                            </span>
-
-                        </div>
-
-                    </div>
-
                 </section>
 
             </main>

@@ -93,10 +93,10 @@ const authRoutes = require("./routes/authRoutes");
 const sensorRoutes = require("./routes/sensorRoutes");
 const logRoutes = require("./routes/logRoutes");
 
-// Debug check
+/* Debug check
 console.log("authRoutes:", typeof authRoutes);
 console.log("sensorRoutes:", typeof sensorRoutes);
-console.log("logRoutes:", typeof logRoutes);
+console.log("logRoutes:", typeof logRoutes);*/
 
 // ============================================================
 // API ROUTES
