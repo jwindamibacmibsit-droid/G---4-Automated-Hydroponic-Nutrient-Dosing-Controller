@@ -51,7 +51,7 @@ function Login({ onLogin }) {
                 Accept: "application/json"
             },
             body: JSON.stringify({
-                email: formData.email.trim(),
+                email: formData.email,
                 password: formData.password
             })
         });

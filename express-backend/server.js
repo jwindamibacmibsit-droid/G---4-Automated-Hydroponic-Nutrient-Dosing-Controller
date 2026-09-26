@@ -55,7 +55,7 @@ app.use((req, res, next) => {
 app.use(
     cors({
         origin: [
-            "https://hydrocontrol-seven.vercel.app",
+            "https://hydrocontrol-seven.vercel.app/",
             "http://localhost:5173",
             "http://localhost:5000"
         ],
@@ -141,7 +141,9 @@ app.use((err, req, res, next) => {
     });
 });
 
-// ============================================================
-// START SERVER
-// ============================================================
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+    console.log(`HydroControl backend running on http://localhost:${PORT}`);
+});
 module.exports = app;
