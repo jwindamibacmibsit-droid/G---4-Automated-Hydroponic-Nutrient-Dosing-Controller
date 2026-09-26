@@ -31,68 +31,74 @@ function Login({ onLogin }) {
     };
 
     const handleSubmit = async (e) => {
-        e.preventDefault();
+    e.preventDefault();
 
-        if (!formData.email || !formData.password) {
-            setError("Please enter your email and password.");
+    if (!formData.email || !formData.password) {
+        setError("Please enter your email and password.");
+        return;
+    }
+
+    setError("");
+    setLoading(true);
+
+    try {
+        console.log("LOGIN URL:", API_URL);
+
+        const response = await fetch(API_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json"
+            },
+            body: JSON.stringify({
+                email: formData.email.trim(),
+                password: formData.password
+            })
+        });
+
+        console.log("HTTP STATUS:", response.status);
+
+        const data = await response.json();
+
+        console.log("LOGIN RESPONSE:", data);
+
+        if (!response.ok || !data.success) {
+            setError(
+                data.message || "Invalid email or password."
+            );
             return;
         }
 
-        setError("");
-        setLoading(true);
+        const user = data.user;
 
-        try {
-            const response = await fetch(API_URL, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Accept: "application/json"
-                },
-                body: JSON.stringify({
-                    email: formData.email,
-                    password: formData.password
-                })
-            });
-
-            const data = await response.json();
-
-            if (!response.ok || !data.success) {
-                setError(
-                    data.message || "Invalid email or password."
-                );
-                return;
-            }
-
-            const user = data.user;
-
-            if (onLogin) {
-                onLogin(user);
-            }
-
-            if (rememberMe) {
-                localStorage.setItem(
-                    "hydrocontrol_user",
-                    JSON.stringify(user)
-                );
-            } else {
-                sessionStorage.setItem(
-                    "hydrocontrol_user",
-                    JSON.stringify(user)
-                );
-            }
-
-            navigate("/dashboard");
-
-        } catch (error) {
-            console.error("Login error:", error);
-
-            setError(
-                "Unable to connect to the HydroControl server."
-            );
-        } finally {
-            setLoading(false);
+        if (onLogin) {
+            onLogin(user);
         }
-    };
+
+        if (rememberMe) {
+            localStorage.setItem(
+                "hydrocontrol_user",
+                JSON.stringify(user)
+            );
+        } else {
+            sessionStorage.setItem(
+                "hydrocontrol_user",
+                JSON.stringify(user)
+            );
+        }
+
+        navigate("/dashboard");
+
+    } catch (error) {
+        console.error("LOGIN FETCH ERROR:", error);
+
+        setError(
+            `Unable to connect to the HydroControl server: ${error.message}`
+        );
+    } finally {
+        setLoading(false);
+    }
+};
 
     return (
         <div className="login-page">
