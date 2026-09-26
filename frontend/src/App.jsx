@@ -8,9 +8,6 @@ import {
 
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
-import WaterMonitoring from "./pages/WaterMonitoring";
-import NutrientControl from "./pages/NutrientControl";
-import PHControl from "./pages/PhControl";
 import PumpControl from "./pages/PumpControl";
 import Logs from "./pages/SystemLogs";
 import Settings from "./pages/Settings";
@@ -106,21 +103,6 @@ function App() {
                     <Route
                         path="/dashboard"
                         element={<Dashboard />}
-                    />
-
-                    <Route
-                        path="/water-monitoring"
-                        element={<WaterMonitoring />}
-                    />
-
-                    <Route
-                        path="/nutrient-control"
-                        element={<NutrientControl />}
-                    />
-
-                    <Route
-                        path="/ph-control"
-                        element={<PHControl />}
                     />
 
                     <Route

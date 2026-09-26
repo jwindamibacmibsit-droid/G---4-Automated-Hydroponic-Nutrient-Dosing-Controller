@@ -11,21 +11,6 @@ function Navbar({ isOpen, setIsOpen }) {
             icon: "⌂"
         },
         {
-            name: "Water Monitoring",
-            path: "/water-monitoring",
-            icon: "💧"
-        },
-        {
-            name: "Nutrient Control",
-            path: "/nutrient-control",
-            icon: "🧪"
-        },
-        {
-            name: "pH Control",
-            path: "/ph-control",
-            icon: "⚗️"
-        },
-        {
             name: "Pump Control",
             path: "/pump-control",
             icon: "⚙️"

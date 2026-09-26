@@ -108,11 +108,11 @@ const getSensorHistory = async (req, res) => {
             LIMIT 20
         `);
 
-        console.log(
+        /*console.log(
             "Sensor history:",
             result.rows.length,
             "readings"
-        );
+        );*/
 
         const history = result.rows
             .reverse()

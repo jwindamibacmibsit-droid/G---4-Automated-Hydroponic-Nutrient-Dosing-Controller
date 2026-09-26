@@ -60,11 +60,6 @@ function Settings() {
 
                             <h1>Settings</h1>
 
-                            <p>
-                                Configure your HydroControl system,
-                                preferences, alerts, and controller settings.
-                            </p>
-
                         </div>
 
                     </div>
