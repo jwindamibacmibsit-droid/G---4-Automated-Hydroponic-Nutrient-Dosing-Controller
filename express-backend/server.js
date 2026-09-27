@@ -52,14 +52,47 @@ app.use((req, res, next) => {
 // ============================================================
 // CORS
 // ============================================================
+const allowedOrigins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "https://hydrocontrol-seven.vercel.app"
+];
+
 app.use(
     cors({
-        origin: [
-            "http://localhost:5173",
-            "http://localhost:3000",
-            "https://hydrocontrol-seven.vercel.app"
+        origin: function (origin, callback) {
+
+            // Allow requests with no origin
+            // such as ESP32/Postman/server-to-server
+            if (!origin) {
+                return callback(null, true);
+            }
+
+            if (allowedOrigins.includes(origin)) {
+                return callback(null, true);
+            }
+
+            console.log("CORS BLOCKED:", origin);
+
+            return callback(
+                new Error("Not allowed by CORS")
+            );
+        },
+
+        methods: [
+            "GET",
+            "POST",
+            "PUT",
+            "DELETE",
+            "OPTIONS"
         ],
-        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+
+        allowedHeaders: [
+            "Content-Type",
+            "Authorization",
+            "Accept"
+        ],
+
         credentials: true
     })
 );
