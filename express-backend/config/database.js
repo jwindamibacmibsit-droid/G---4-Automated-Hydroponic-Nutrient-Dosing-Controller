@@ -9,14 +9,12 @@ const pool = new Pool({
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
 
-    // Connection pool limits
     max: 10,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
 
-    // Stop excessively long database operations
     statement_timeout: 5000,
     query_timeout: 5000
 });
 
-module.exports = pool;  
+module.exports = pool;
