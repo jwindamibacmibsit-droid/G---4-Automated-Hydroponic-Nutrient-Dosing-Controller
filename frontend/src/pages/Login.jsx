@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../css/login.css";
 
-const API_URL = "https://backend-pi-three-53.vercel.app/api/auth/login";
+const API_URL = `${import.meta.env.VITE_API_URL}/api/auth/login`;
 
 function Login({ onLogin }) {
     const navigate = useNavigate();
