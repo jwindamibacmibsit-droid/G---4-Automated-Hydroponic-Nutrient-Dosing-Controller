@@ -29,7 +29,7 @@ function Login({ onLogin }) {
         setError("");
     };
 
-    const handleSubmit = async (e) => {
+const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!formData.email || !formData.password) {
@@ -41,7 +41,10 @@ function Login({ onLogin }) {
     setLoading(true);
 
     try {
+        console.log("=================================");
         console.log("LOGIN URL:", API_URL);
+        console.log("EMAIL:", formData.email);
+        console.log("=================================");
 
         const response = await fetch(API_URL, {
             method: "POST",
@@ -56,8 +59,36 @@ function Login({ onLogin }) {
         });
 
         console.log("HTTP STATUS:", response.status);
+        console.log("STATUS TEXT:", response.statusText);
+        console.log(
+            "CONTENT TYPE:",
+            response.headers.get("content-type")
+        );
 
-        const data = await response.json();
+        // Read the response as TEXT first
+        const responseText = await response.text();
+
+        console.log("RAW SERVER RESPONSE:", responseText);
+
+        // Empty response
+        if (!responseText.trim()) {
+            throw new Error(
+                `Server returned an empty response. HTTP ${response.status}`
+            );
+        }
+
+        // Try to parse JSON
+        let data;
+
+        try {
+            data = JSON.parse(responseText);
+        } catch (jsonError) {
+            console.error("INVALID JSON RESPONSE:", responseText);
+
+            throw new Error(
+                `Server returned invalid JSON. HTTP ${response.status}`
+            );
+        }
 
         console.log("LOGIN RESPONSE:", data);
 
@@ -94,6 +125,7 @@ function Login({ onLogin }) {
         setError(
             `Unable to connect to the HydroControl server: ${error.message}`
         );
+
     } finally {
         setLoading(false);
     }
