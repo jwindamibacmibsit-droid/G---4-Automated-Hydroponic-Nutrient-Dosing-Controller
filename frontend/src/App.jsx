@@ -72,6 +72,10 @@ function App() {
                         path="/login"
                         element={<Login />}
                     />
+                    <Route
+                        path="/dashboard"
+                        element={<Dashboard />}
+                    />
                 </Route>
 
 
@@ -99,11 +103,6 @@ function App() {
                 ========================== */}
 
                 <Route element={<ProtectedRoute />}>
-
-                    <Route
-                        path="/dashboard"
-                        element={<Dashboard />}
-                    />
 
                     <Route
                         path="/pump-control"
