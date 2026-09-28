@@ -3,7 +3,6 @@ import {
     Routes,
     Route,
     Navigate,
-    Outlet
 } from "react-router-dom";
 
 import Login from "./pages/Login";
@@ -12,10 +11,13 @@ import PumpControl from "./pages/PumpControl";
 import Logs from "./pages/SystemLogs";
 import Settings from "./pages/Settings";
 import About from "./pages/About";
+import ProtectedRoute from "./components/ProtectedRoute";
+import PublicRoute from "./components/PublicRoute";
 
 /*
  * Check if the user is logged in.
  */
+
 function isAuthenticated() {
     const localUser = localStorage.getItem("hydrocontrol_user");
     const sessionUser = sessionStorage.getItem("hydrocontrol_user");
@@ -36,27 +38,8 @@ function isAuthenticated() {
  * /settings
  * /about
  */
-function ProtectedRoute() {
-    if (!isAuthenticated()) {
-        return <Navigate to="/login" replace />;
-    }
 
-    return <Outlet />;
-}
 
-/*
- * Public routes
- *
- * If the user is already logged in and tries to visit /login,
- * send them back to the dashboard.
- */
-function PublicRoute() {
-    if (isAuthenticated()) {
-        return <Navigate to="/dashboard" replace />;
-    }
-
-    return <Outlet />;
-}
 
 function App() {
     return (

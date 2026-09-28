@@ -130,10 +130,10 @@ const authRoutes = require("./routes/authRoutes");
 const sensorRoutes = require("./routes/sensorRoutes");
 const logRoutes = require("./routes/logRoutes");
 
-/* Debug check
+// Debug check
 console.log("authRoutes:", typeof authRoutes);
 console.log("sensorRoutes:", typeof sensorRoutes);
-console.log("logRoutes:", typeof logRoutes);*/
+console.log("logRoutes:", typeof logRoutes);
 
 // ============================================================
 // API ROUTES
@@ -141,6 +141,13 @@ console.log("logRoutes:", typeof logRoutes);*/
 app.use("/api/auth", authRoutes);
 app.use("/api/sensors", sensorRoutes);
 app.use("/api/logs", logRoutes);
+
+app.get("/api/test", (req, res) => {
+    res.json({
+        success: true,
+        message: "API routing works"
+    });
+});
 
 // ============================================================
 // ROOT
@@ -183,7 +190,7 @@ if (require.main === module) {
 
     app.listen(PORT, () => {
         console.log(
-            `HydroControl backend running on http://localhost:${PORT}`
+            `Server running on http://localhost:${PORT}`
         );
     });
 }

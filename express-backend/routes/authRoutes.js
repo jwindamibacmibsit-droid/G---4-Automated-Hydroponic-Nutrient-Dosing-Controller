@@ -4,13 +4,15 @@ const router = express.Router();
 
 const { login } = require("../controllers/authController");
 
-router.post("/login", login);
+console.log("AUTH ROUTES LOADED");
 
-router.get("/", (req, res) => {
+router.get("/login", (req, res) => {
     res.json({
         success: true,
         message: "Authentication API is working."
     });
 });
+
+router.post("/login", login);
 
 module.exports = router;
