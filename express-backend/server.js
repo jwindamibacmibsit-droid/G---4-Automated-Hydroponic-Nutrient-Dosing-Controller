@@ -2,7 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
-
+const pool = require("./config/database");
 const app = express();
 
 // Hide Express information
@@ -147,6 +147,27 @@ app.get("/api/test", (req, res) => {
         success: true,
         message: "API routing works"
     });
+});
+
+
+app.get("/api/db", async (req, res) => {
+    try {
+        const result = await pool.query("SELECT NOW()");
+
+        res.json({
+            success: true,
+            message: "Database connection works.",
+            time: result.rows[0].now
+        });
+    } catch (error) {
+        console.error("DB TEST ERROR:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Database connection failed.",
+            error: error.message
+        });
+    }
 });
 
 // ============================================================
