@@ -41,11 +41,6 @@ const handleSubmit = async (e) => {
     setLoading(true);
 
     try {
-        console.log("=================================");
-        console.log("LOGIN URL:", API_URL);
-        console.log("EMAIL:", formData.email);
-        console.log("=================================");
-
         const response = await fetch(API_URL, {
             method: "POST",
             headers: {
@@ -60,15 +55,9 @@ const handleSubmit = async (e) => {
 
         console.log("HTTP STATUS:", response.status);
         console.log("STATUS TEXT:", response.statusText);
-        console.log(
-            "CONTENT TYPE:",
-            response.headers.get("content-type")
-        );
 
         // Read the response as TEXT first
         const responseText = await response.text();
-
-        console.log("RAW SERVER RESPONSE:", responseText);
 
         // Empty response
         if (!responseText.trim()) {
@@ -90,7 +79,6 @@ const handleSubmit = async (e) => {
             );
         }
 
-        console.log("LOGIN RESPONSE:", data);
 
         if (!response.ok || !data.success) {
             setError(
