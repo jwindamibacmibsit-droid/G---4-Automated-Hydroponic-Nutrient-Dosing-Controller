@@ -1,8 +1,9 @@
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
-const pool = require("./config/database");
+const pool = require("./config/supabase");
 const app = express();
 
 // Hide Express information
@@ -167,6 +168,12 @@ app.get("/api/db", async (req, res) => {
             message: "Database connection failed.",
             error: error.message
         });
+
+        console.log("DB HOST:", process.env.DB_HOST);
+console.log("DB PORT:", process.env.DB_PORT);
+console.log("DB NAME:", process.env.DB_NAME);
+console.log("DB USER:", process.env.DB_USER);
+console.log("DB PASSWORD EXISTS:", !!process.env.DB_PASSWORD);
     }
 });
 

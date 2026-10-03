@@ -1,5 +1,6 @@
-const pool = require("../config/database");
+const pool = require("../config/supabase");
 const bcrypt = require("bcrypt");
+const supabase = require("../config/supabase");
 
 const login = async (req, res) => {
     const { email, password } = req.body;

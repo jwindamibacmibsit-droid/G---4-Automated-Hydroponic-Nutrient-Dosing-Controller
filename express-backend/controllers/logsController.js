@@ -1,4 +1,4 @@
-const pool = require("../config/database");
+const pool = require("../config/supabase");
 
 // GET SYSTEM LOGS
 const getSystemLogs = async (req, res) => {
