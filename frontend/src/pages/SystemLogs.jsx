@@ -4,7 +4,7 @@ import Sidebar from "../components/Navbar";
 
 import "../css/system-logs.css";
 
-const API_URL = "http://localhost:5000/api";
+const API_URL = `${import.meta.env.VITE_API_URL}/api`;
 
 function SystemLogs() {
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -31,7 +31,7 @@ function SystemLogs() {
             setLoading(true);
             setError("");
 
-            const response = await fetch(`${API_URL}/logs`);
+            const response = await fetch(`${API_URL}/api/logs`);
 
             const result = await response.json();
 

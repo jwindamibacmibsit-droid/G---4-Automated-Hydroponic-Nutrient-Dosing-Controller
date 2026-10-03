@@ -1,224 +1,39 @@
 require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
-const helmet = require("helmet");
-const rateLimit = require("express-rate-limit");
-const pool = require("./config/supabase");
-const app = express();
 
-// Hide Express information
-app.disable("x-powered-by");
-
-// ============================================================
-// SECURITY HEADERS
-// ============================================================
-app.use(helmet());
-
-// ============================================================
-// BLOCK ?url= QUERY PARAMETER
-// ============================================================
-app.use((req, res, next) => {
-    if (req.query.url !== undefined) {
-        return res.status(403).json({
-            success: false,
-            message: "URL parameter is not allowed"
-        });
-    }
-
-    next();
-});
-
-// ============================================================
-// BLOCK SENSITIVE FILES
-// ============================================================
-app.use((req, res, next) => {
-    const path = req.path.toLowerCase();
-
-    if (
-        path === "/.env" ||
-        path.startsWith("/.env.") ||
-        path === "/.git" ||
-        path.startsWith("/.git/") ||
-        path === "/.gitignore"
-    ) {
-        return res.status(404).json({
-            success: false,
-            message: "Not found"
-        });
-    }
-
-    next();
-});
-
-// ============================================================
-// CORS
-// ============================================================
-const allowedOrigins = [
-    "http://localhost:5173",
-    "http://localhost:3000",
-    "https://hydrocontrol-seven.vercel.app"
-];
-
-app.use(
-    cors({
-        origin: function (origin, callback) {
-
-            // Allow requests with no origin
-            // such as ESP32/Postman/server-to-server
-            if (!origin) {
-                return callback(null, true);
-            }
-
-            if (allowedOrigins.includes(origin)) {
-                return callback(null, true);
-            }
-
-            console.log("CORS BLOCKED:", origin);
-
-            return callback(
-                new Error("Not allowed by CORS")
-            );
-        },
-
-        methods: [
-            "GET",
-            "POST",
-            "PUT",
-            "DELETE",
-            "OPTIONS"
-        ],
-
-        allowedHeaders: [
-            "Content-Type",
-            "Authorization",
-            "Accept"
-        ],
-
-        credentials: true
-    })
-);
-
-// ============================================================
-// JSON BODY LIMIT
-// ============================================================
-app.use(
-    express.json({
-        limit: "10kb"
-    })
-);
-
-// ============================================================
-// RATE LIMITING
-// ============================================================
-const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    limit: 300,
-    standardHeaders: "draft-7",
-    legacyHeaders: false,
-
-    message: {
-        success: false,
-        message: "Too many requests. Please try again later."
-    }
-});
-
-app.use("/api", apiLimiter);
-
-// ============================================================
-// IMPORT ROUTES
-// ============================================================
 const authRoutes = require("./routes/authRoutes");
 const sensorRoutes = require("./routes/sensorRoutes");
 const logRoutes = require("./routes/logRoutes");
 
-// Debug check
-console.log("authRoutes:", typeof authRoutes);
-console.log("sensorRoutes:", typeof sensorRoutes);
-console.log("logRoutes:", typeof logRoutes);
+const app = express();
 
-// ============================================================
-// API ROUTES
-// ============================================================
+
+app.use(
+    cors({
+        origin: "http://localhost:5173",
+        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        credentials: true
+    })
+);
+
+app.use(express.json());
+
 app.use("/api/auth", authRoutes);
 app.use("/api/sensors", sensorRoutes);
 app.use("/api/logs", logRoutes);
 
-app.get("/api/test", (req, res) => {
-    res.json({
-        success: true,
-        message: "API routing works"
-    });
-});
 
-
-app.get("/api/db", async (req, res) => {
-    try {
-        const result = await pool.query("SELECT NOW()");
-
-        res.json({
-            success: true,
-            message: "Database connection works.",
-            time: result.rows[0].now
-        });
-    } catch (error) {
-        console.error("DB TEST ERROR:", error);
-
-        res.status(500).json({
-            success: false,
-            message: "Database connection failed.",
-            error: error.message
-        });
-
-        console.log("DB HOST:", process.env.DB_HOST);
-console.log("DB PORT:", process.env.DB_PORT);
-console.log("DB NAME:", process.env.DB_NAME);
-console.log("DB USER:", process.env.DB_USER);
-console.log("DB PASSWORD EXISTS:", !!process.env.DB_PASSWORD);
-    }
-});
-
-// ============================================================
-// ROOT
-// ============================================================
 app.get("/", (req, res) => {
     res.json({
         success: true,
-        message: "HydroControl backend is running!"
+        message: "HydroControl API is running."
     });
 });
 
-// ============================================================
-// 404 HANDLER
-// ============================================================
-app.use((req, res) => {
-    res.status(404).json({
-        success: false,
-        message: "Route not found"
-    });
+const PORT = process.env.PORT || 5000;
+
+app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
 });
-
-// ============================================================
-// ERROR HANDLER
-// ============================================================
-app.use((err, req, res, next) => {
-    console.error("Server error:", err);
-
-    res.status(500).json({
-        success: false,
-        message: "Internal server error."
-    });
-});
-
-// module.exports = app;
-module.exports = app;
-
-// Start server only when running locally
-if (require.main === module) {
-    const PORT = process.env.PORT || 5000;
-
-    app.listen(PORT, () => {
-        console.log(
-            `Server running on http://localhost:${PORT}`
-        );
-    });
-}

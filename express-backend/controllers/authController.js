@@ -1,6 +1,5 @@
 const pool = require("../config/supabase");
 const bcrypt = require("bcrypt");
-const supabase = require("../config/supabase");
 
 const login = async (req, res) => {
     const { email, password } = req.body;
@@ -15,12 +14,7 @@ const login = async (req, res) => {
 
         const result = await pool.query(
             `
-            SELECT
-                id,
-                name,
-                email,
-                password_hash,
-                role
+            SELECT id, name, email, password_hash
             FROM users
             WHERE email = $1
             LIMIT 1
@@ -37,6 +31,15 @@ const login = async (req, res) => {
 
         const user = result.rows[0];
 
+        if (!user.password_hash) {
+            console.error("PASSWORD IS EMPTY FOR:", user.email);
+
+            return res.status(500).json({
+                success: false,
+                message: "User password is not configured."
+            });
+        }
+
         const passwordMatch = await bcrypt.compare(
             password,
             user.password_hash
@@ -49,71 +52,24 @@ const login = async (req, res) => {
             });
         }
 
-        // ==========================================
-        // UPDATE LAST LOGIN
-        // ==========================================
-
-        await pool.query(
-            `
-            UPDATE users
-            SET
-                last_login = CURRENT_TIMESTAMP,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = $1
-            `,
-            [user.id]
-        );
-
-        // ==========================================
-        // RECORD SUCCESSFUL LOGIN
-        // ==========================================
-
-        await pool.query(
-            `
-            INSERT INTO system_logs
-            (
-                user_id,
-                level,
-                category,
-                event,
-                details
-            )
-            VALUES ($1, $2, $3, $4, $5)
-            `,
-            [
-                user.id,
-                "SUCCESS",
-                "AUTH",
-                "User login successful",
-                `User ${user.email} logged into HydroControl.`
-            ]
-        );
-
-        // ==========================================
-        // LOGIN RESPONSE
-        // ==========================================
-
         return res.status(200).json({
             success: true,
             message: "Login successful.",
             user: {
                 id: user.id,
                 name: user.name,
-                email: user.email,
-                role: user.role
+                email: user.email
             }
         });
 
     } catch (error) {
-        console.error("LOGIN ERROR:", error);
+        console.error("LOGIN DATABASE ERROR:", error);
 
         return res.status(500).json({
             success: false,
-            message: "Login failed."
+            message: "Database error."
         });
     }
 };
 
-module.exports = {
-    login
-};
+module.exports = { login };

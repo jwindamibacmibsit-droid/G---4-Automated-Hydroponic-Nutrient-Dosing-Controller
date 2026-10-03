@@ -1,16 +1,20 @@
-const { createClient } = require("@supabase/supabase-js");
+const { Pool } = require("pg");
 require("dotenv").config();
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const pool = new Pool({
+    host: process.env.DB_HOST,
+    port: Number(process.env.DB_PORT),
+    database: process.env.DB_NAME,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD
+});
 
-if (!supabaseUrl || !supabaseKey) {
-    throw new Error("Missing Supabase environment variables");
-}
+pool.on("connect", () => {
+    console.log("PostgreSQL connected successfully.");
+});
 
-const supabase = createClient(
-    supabaseUrl,
-    supabaseKey
-);
+pool.on("error", (err) => {
+    console.error("PostgreSQL pool error:", err);
+});
 
-module.exports = supabase;
+module.exports = pool;
