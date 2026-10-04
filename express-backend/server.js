@@ -23,6 +23,7 @@ app.use(
             "https://www.hydrocontrol.site"
         ],
         methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allowedHeaders: ["Content-Type", "Authorization"],
         credentials: true
     })
 );
