@@ -10,12 +10,36 @@ const sensorRoutes = require("./routes/sensorRoutes");
 
 const app = express();
 
-app.use(cors());
+// ==========================================
+// MIDDLEWARE
+// ==========================================
+
+app.use(
+    cors({
+        origin: [
+            "http://localhost:5173",
+            "http://localhost:3000",
+            "https://hydrocontrol.site",
+            "https://www.hydrocontrol.site"
+        ],
+        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        credentials: true
+    })
+);
+
 app.use(express.json());
+
+// ==========================================
+// ROUTES
+// ==========================================
 
 app.use("/api/auth", authRoutes);
 app.use("/api/sensors", sensorRoutes);
 app.use("/api/health", healthRoutes);
+
+// ==========================================
+// ROOT
+// ==========================================
 
 app.get("/", (req, res) => {
     res.json({
@@ -24,7 +48,10 @@ app.get("/", (req, res) => {
     });
 });
 
-// Test Supabase PostgreSQL connection
+// ==========================================
+// DATABASE TEST
+// ==========================================
+
 app.get("/api/test-db", async (req, res) => {
     try {
         const result = await pool.query("SELECT NOW()");
@@ -36,7 +63,7 @@ app.get("/api/test-db", async (req, res) => {
         });
 
     } catch (error) {
-        console.error(error);
+        console.error("DATABASE ERROR:", error);
 
         res.status(500).json({
             success: false,
@@ -46,8 +73,12 @@ app.get("/api/test-db", async (req, res) => {
     }
 });
 
-const PORT = process.env.PORT || 5000;
+module.exports = app;
 
-app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-});
+if (require.main === module) {
+    const PORT = process.env.PORT || 5000;
+
+    app.listen(PORT, () => {
+        console.log(`Server running on http://localhost:${PORT}`);
+    });
+}
