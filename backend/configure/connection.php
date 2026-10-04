@@ -13,7 +13,7 @@ $username = "postgres";
 $password = "@liklikwindam";
 
 
-try {
+try { 
 
     $dsn = "pgsql:host={$host};port={$port};dbname={$dbname}";
 

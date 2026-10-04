@@ -21,11 +21,6 @@ const getLatestReading = async (req, res) => {
             LIMIT 1
         `);
 
-        console.log(
-            "Latest sensor reading:",
-            result.rows
-        );
-
         // No data
         if (result.rows.length === 0) {
             return res.status(404).json({

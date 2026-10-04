@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../css/login.css";
 
-const API_URL = `${import.meta.env.VITE_API_URL}/api/auth/login`;
+const API_URL = import.meta.env.VITE_API_URL;
 
 function Login({ onLogin }) {
     const navigate = useNavigate();
@@ -41,32 +41,32 @@ const handleSubmit = async (e) => {
     setLoading(true);
 
     try {
-        const response = await fetch(API_URL, {
+        console.log("LOGIN REQUEST:", {
+            email: formData.email,
+            password: "********"
+        });
+
+        console.log("API URL:", API_URL);
+
+        const response = await fetch(`${API_URL}/auth/login`, {
             method: "POST",
             headers: {
-                "Content-Type": "application/json",
-                Accept: "application/json"
+                "Content-Type": "application/json"
             },
-            body: JSON.stringify({
-                email: formData.email,
-                password: formData.password
-            })
+            body: JSON.stringify(formData)
         });
 
         console.log("HTTP STATUS:", response.status);
         console.log("STATUS TEXT:", response.statusText);
 
-        // Read the response as TEXT first
         const responseText = await response.text();
 
-        // Empty response
         if (!responseText.trim()) {
             throw new Error(
                 `Server returned an empty response. HTTP ${response.status}`
             );
         }
 
-        // Try to parse JSON
         let data;
 
         try {
@@ -79,6 +79,7 @@ const handleSubmit = async (e) => {
             );
         }
 
+        console.log("LOGIN RESPONSE:", data);
 
         if (!response.ok || !data.success) {
             setError(

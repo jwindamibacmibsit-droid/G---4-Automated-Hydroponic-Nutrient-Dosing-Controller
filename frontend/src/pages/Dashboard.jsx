@@ -17,7 +17,7 @@ import {
     YAxis
 } from "recharts";
 
-const API_URL = `${import.meta.env.VITE_API_URL}/api`;
+const API_URL = `${import.meta.env.VITE_API_URL}`;
 
 const toNumber = (value) => {
     if (value === null || value === undefined || value === "") return null;
@@ -44,38 +44,68 @@ function Dashboard() {
     const [loading, setLoading] = useState(true);
     const [offline, setOffline] = useState(false);
     const [lastUpdated, setLastUpdated] = useState(null);
+const fetchSensorData = async () => {
+    try {
+        setLoading(true);
 
-    const fetchSensorData = async () => {
-        try {
-            const [latestResponse, historyResponse] = await Promise.all([
-                fetch(`${API_URL}/sensors/latest`),
-                fetch(`${API_URL}/sensors/history`)
-            ]);
+        const latestResponse = await fetch(
+            `${API_URL}/sensors/latest`
+        );
 
-            if (!latestResponse.ok && latestResponse.status !== 404) {
-                throw new Error("Latest sensor request failed");
-            }
+        const historyResponse = await fetch(
+            `${API_URL}/sensors/history`
+        );
 
-            if (!historyResponse.ok) {
-                throw new Error("Sensor history request failed");
-            }
-
-            const latestJson = latestResponse.status === 404
-                ? { success: false, data: null }
-                : await latestResponse.json();
-            const historyJson = await historyResponse.json();
-
-            setLatest(latestJson?.data || null);
-            setHistory(Array.isArray(historyJson?.data) ? historyJson.data : []);
-            setOffline(false);
-            setLastUpdated(new Date());
-        } catch (error) {
-            console.error("Dashboard sensor error:", error);
-            setOffline(true);
-        } finally {
-            setLoading(false);
+        if (!latestResponse.ok) {
+            throw new Error(
+                `Latest sensor request failed: ${latestResponse.status}`
+            );
         }
-    };
+
+        if (!historyResponse.ok) {
+            throw new Error(
+                `Sensor history request failed: ${historyResponse.status}`
+            );
+        }
+
+        const latestData = await latestResponse.json();
+        const historyData = await historyResponse.json();
+
+        // ==========================================
+        // UPDATE REACT STATE
+        // ==========================================
+
+        if (latestData.success && latestData.data) {
+            setLatest(latestData.data);
+        } else {
+            throw new Error(
+                latestData.message || "Invalid latest sensor data"
+            );
+        }
+
+        if (historyData.success && Array.isArray(historyData.data)) {
+            setHistory(historyData.data);
+        } else {
+            throw new Error(
+                historyData.message || "Invalid sensor history data"
+            );
+        }
+
+        // API is working
+        setOffline(false);
+
+        // Update sync time
+        setLastUpdated(new Date());
+
+    } catch (error) {
+        console.error("Dashboard sensor error:", error);
+
+        setOffline(true);
+
+    } finally {
+        setLoading(false);
+    }
+};
 
     useEffect(() => {
         fetchSensorData();
