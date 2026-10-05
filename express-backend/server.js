@@ -49,6 +49,11 @@ app.get("/", (req, res) => {
     });
 });
 
+
+app.get('/api', (req, res) => {
+  res.json({ message: "HydroControl API is running smoothly!" });
+});
+
 // ==========================================
 // DATABASE TEST
 // ==========================================
