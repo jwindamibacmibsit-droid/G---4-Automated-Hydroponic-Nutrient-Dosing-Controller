@@ -1,23 +1,8 @@
 {
-  "version": 2,
-  "builds": [
+  "rewrites": [
     {
-      "src": "frontend/package.json",
-      "use": "@vercel/vite"
-    },
-    {
-      "src": "express-backend/server.js",
-      "use": "@vercel/node"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "express-backend/server.js"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "frontend/$1"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
