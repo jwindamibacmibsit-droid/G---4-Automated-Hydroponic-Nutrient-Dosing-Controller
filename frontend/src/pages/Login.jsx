@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../css/login.css";
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://api.hydrocontrol.site';
+const API_URL = import.meta.env.VITE_API_URL;
 
 function Login({ onLogin }) {
     const navigate = useNavigate();
