@@ -48,10 +48,12 @@ const handleSubmit = async (e) => {
 
         console.log("API URL:", API_URL);
 
-        const response = await fetch(`${API_URL}/api/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(credentials),
+        const response = await fetch(`${API_URL}/auth/login`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(formData)
         });
 
         console.log("HTTP STATUS:", response.status);
