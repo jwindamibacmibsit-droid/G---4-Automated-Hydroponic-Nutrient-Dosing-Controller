@@ -15,8 +15,8 @@ const corsOptions = {
     origin: [
         "http://localhost:5173",
         "http://localhost:3000",
-        "https://hydroponic.site",
-        "https://www.hydroponic.site"
+        "https://hydrocontrol.site",
+        "https://www.hydrocontrol.site"
     ],
     methods: [
         "GET",
@@ -29,7 +29,8 @@ const corsOptions = {
         "Content-Type",
         "Authorization"
     ],
-    credentials: false
+    credentials: false,
+    optionsSuccessStatus: 204
 };
 
 app.use(cors(corsOptions));
