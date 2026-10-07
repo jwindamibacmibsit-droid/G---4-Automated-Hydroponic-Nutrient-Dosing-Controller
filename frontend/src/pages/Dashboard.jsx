@@ -49,11 +49,11 @@ const fetchSensorData = async () => {
         setLoading(true);
 
         const latestResponse = await fetch(
-            `${API_URL}/sensors/latest`
+            `${API_URL}/api/sensors/latest`
         );
 
         const historyResponse = await fetch(
-            `${API_URL}/sensors/history`
+            `${API_URL}/api/sensors/history`
         );
 
         if (!latestResponse.ok) {
@@ -151,14 +151,6 @@ const fetchSensorData = async () => {
         : "--";
 
     const cards = [
-        {
-            icon: "◉",
-            title: "Water Temperature",
-            value: values.temperature?.toFixed(1) ?? "--",
-            unit: "°C",
-            status: getStatus(values.temperature, 22, 26),
-            description: "Target range 22–26°C"
-        },
         {
             icon: "⌁",
             title: "pH Level",

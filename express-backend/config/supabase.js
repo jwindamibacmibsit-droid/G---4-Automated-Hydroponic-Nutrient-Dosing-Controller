@@ -1,20 +1,8 @@
-require("dotenv").config();
+const { createClient } = require("@supabase/supabase-js");
 
-const { Pool } = require("pg");
+const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_PUBLISHABLE_KEY
+);
 
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: {
-        rejectUnauthorized: false
-    }
-});
-
-pool.on("connect", () => {
-    console.log("PostgreSQL connected successfully.");
-});
-
-pool.on("error", (err) => {
-    console.error("Unexpected PostgreSQL error:", err);
-});
-
-module.exports = pool;
+module.exports = supabase;

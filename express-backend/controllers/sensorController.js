@@ -1,4 +1,4 @@
-const pool = require("../config/supabase");
+const supabase = require("../config/supabase");
 
 // ==========================================
 // GET LATEST SENSOR READING
@@ -6,33 +6,43 @@ const pool = require("../config/supabase");
 
 const getLatestReading = async (req, res) => {
     try {
-        const result = await pool.query(`
-            SELECT
+        const { data: reading, error } = await supabase
+            .from("sensor_reading")
+            .select(`
                 id,
                 device_id,
                 ph_value,
                 water_level,
-                temperature,
+
                 nutrient_a,
                 nutrient_b,
                 timestamp
-            FROM sensor_reading
-            ORDER BY timestamp DESC
-            LIMIT 1
-        `);
+            `)
+            .order("timestamp", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if (error) {
+            console.error("SUPABASE SENSOR ERROR:", error);
+
+            return res.status(500).json({
+                success: false,
+                message: "Failed to retrieve sensor reading.",
+                error: error.message
+            });
+        }
 
         // No data
-        if (result.rows.length === 0) {
+        if (!reading) {
             return res.status(404).json({
                 success: false,
                 message: "No sensor readings found."
             });
         }
 
-        const reading = result.rows[0];
 
         // Send data to React
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
             data: {
                 id: reading.id,
@@ -69,12 +79,9 @@ const getLatestReading = async (req, res) => {
         });
 
     } catch (error) {
-        console.error(
-            "SENSOR DATABASE ERROR:",
-            error
-        );
+        console.error("SENSOR DATABASE ERROR:", error);
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message: "Failed to retrieve sensor reading.",
             error: error.message
@@ -82,34 +89,42 @@ const getLatestReading = async (req, res) => {
     }
 };
 
+
 // ==========================================
 // GET SENSOR HISTORY
 // ==========================================
 
 const getSensorHistory = async (req, res) => {
     try {
-        const result = await pool.query(`
-            SELECT
+        const { data: readings, error } = await supabase
+            .from("sensor_reading")
+            .select(`
                 id,
                 device_id,
                 ph_value,
                 water_level,
-                temperature,
+                
                 nutrient_a,
                 nutrient_b,
                 timestamp
-            FROM sensor_reading
-            ORDER BY timestamp DESC
-            LIMIT 20
-        `);
+            `)
+            .order("timestamp", { ascending: false })
+            .limit(20);
 
-        /*console.log(
-            "Sensor history:",
-            result.rows.length,
-            "readings"
-        );*/
+        if (error) {
+            console.error(
+                "SUPABASE SENSOR HISTORY ERROR:",
+                error
+            );
 
-        const history = result.rows
+            return res.status(500).json({
+                success: false,
+                message: "Failed to retrieve sensor history.",
+                error: error.message
+            });
+        }
+
+        const history = (readings || [])
             .reverse()
             .map((reading) => ({
                 id: reading.id,
@@ -144,7 +159,7 @@ const getSensorHistory = async (req, res) => {
                 timestamp: reading.timestamp
             }));
 
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
             data: history
         });
@@ -155,13 +170,14 @@ const getSensorHistory = async (req, res) => {
             error
         );
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
             message: "Failed to retrieve sensor history.",
             error: error.message
         });
     }
 };
+
 
 // ==========================================
 // EXPORT

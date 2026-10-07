@@ -2,7 +2,7 @@ import {
     BrowserRouter,
     Routes,
     Route,
-    Navigate,
+    Navigate
 } from "react-router-dom";
 
 import Login from "./pages/Login";

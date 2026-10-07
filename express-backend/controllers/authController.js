@@ -1,4 +1,4 @@
-const pool = require("../config/supabase");
+const supabase = require("../config/supabase");
 const bcrypt = require("bcrypt");
 
 const login = async (req, res) => {
@@ -12,24 +12,28 @@ const login = async (req, res) => {
             });
         }
 
-        const result = await pool.query(
-            `
-            SELECT id, name, email, password_hash
-            FROM users
-            WHERE email = $1
-            LIMIT 1
-            `,
-            [email]
-        );
+        const { data: user, error } = await supabase
+            .from("users")
+            .select("id, name, email, password_hash")
+            .eq("email", email)
+            .maybeSingle();
 
-        if (result.rows.length === 0) {
+        if (error) {
+            console.error("SUPABASE LOGIN ERROR:", error);
+
+            return res.status(500).json({
+                success: false,
+                message: "Database error.",
+                error: error.message
+            });
+        }
+
+        if (!user) {
             return res.status(401).json({
                 success: false,
                 message: "Invalid email or password."
             });
         }
-
-        const user = result.rows[0];
 
         if (!user.password_hash) {
             console.error("PASSWORD IS EMPTY FOR:", user.email);
@@ -63,11 +67,11 @@ const login = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("LOGIN DATABASE ERROR:", error);
+        console.error("LOGIN ERROR:", error);
 
         return res.status(500).json({
             success: false,
-            message: "Database error."
+            message: "Server error."
         });
     }
 };

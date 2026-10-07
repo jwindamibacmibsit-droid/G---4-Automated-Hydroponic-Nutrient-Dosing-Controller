@@ -41,14 +41,10 @@ const handleSubmit = async (e) => {
     setLoading(true);
 
     try {
-        console.log("LOGIN REQUEST:", {
-            email: formData.email,
-            password: "********"
-        });
 
         console.log("API URL:", API_URL);
 
-        const response = await fetch(`${API_URL}/auth/login`, {
+        const response = await fetch(`${API_URL}/api/auth/login`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"

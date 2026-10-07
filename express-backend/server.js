@@ -2,7 +2,8 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
-const pool = require("./config/supabase");
+
+const supabase = require("./config/supabase");
 
 const authRoutes = require("./routes/authRoutes");
 const healthRoutes = require("./routes/healthRoutes");
@@ -10,18 +11,13 @@ const sensorRoutes = require("./routes/sensorRoutes");
 
 const app = express();
 
-// ==========================================
-// CORS
-// ==========================================
-
 const corsOptions = {
     origin: [
         "http://localhost:5173",
         "http://localhost:3000",
-        "https://hydrocontrol.site",
-        "https://www.hydrocontrol.site"
+        "https://hydroponic.site",
+        "https://www.hydroponic.site"
     ],
-
     methods: [
         "GET",
         "POST",
@@ -29,36 +25,23 @@ const corsOptions = {
         "DELETE",
         "OPTIONS"
     ],
-
     allowedHeaders: [
         "Content-Type",
         "Authorization"
     ],
-
-    credentials: false,
-
-    optionsSuccessStatus: 204
+    credentials: false
 };
 
 app.use(cors(corsOptions));
 
-// Explicitly handle browser preflight requests
-app.options(/.*/, cors(corsOptions));
 
-
-app.use(express.json());
-
-// ==========================================
-// ROUTES
-// ==========================================
+app.use(express.json())
 
 app.use("/api/auth", authRoutes);
 app.use("/api/sensors", sensorRoutes);
 app.use("/api/health", healthRoutes);
 
-// ==========================================
-// ROOT
-// ==========================================
+
 
 app.get("/", (req, res) => {
     res.json({
@@ -67,34 +50,33 @@ app.get("/", (req, res) => {
     });
 });
 
-
-app.get('/api', (req, res) => {
-  res.json({ message: "HydroControl API is running smoothly!" });
+app.get("/api", (req, res) => {
+    res.json({
+        message: "HydroControl API is running smoothly!"
+    });
 });
 
-// ==========================================
-// DATABASE TEST
-// ==========================================
 
-app.get("/api/test-db", async (req, res) => {
-    try {
-        const result = await pool.query("SELECT NOW()");
 
-        res.json({
-            success: true,
-            message: "Supabase database connected!",
-            time: result.rows[0].now
-        });
+app.get("/api/test", async (req, res) => {
+    const { data, error } = await supabase
+        .from("pumps")
+        .select("*");
 
-    } catch (error) {
-        console.error("DATABASE ERROR:", error);
+    if (error) {
+        console.error("Supabase error:", error);
 
-        res.status(500).json({
+        return res.status(500).json({
             success: false,
-            message: "Database connection failed",
+
             error: error.message
         });
     }
+
+    res.json({
+        success: true,
+        data
+    });
 });
 
 module.exports = app;
