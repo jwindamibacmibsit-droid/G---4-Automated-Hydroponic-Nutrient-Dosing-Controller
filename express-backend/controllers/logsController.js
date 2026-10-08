@@ -20,7 +20,6 @@ const getSystemLogs = async (req, res) => {
                 level,
                 category,
                 event,
-                device,
                 details,
                 created_at
             `)
