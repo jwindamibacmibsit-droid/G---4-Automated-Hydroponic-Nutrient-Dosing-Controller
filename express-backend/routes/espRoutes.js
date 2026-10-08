@@ -8,12 +8,26 @@ const {
 } = require("../controllers/espController");
 
 
-// ESP32 sensor data
-router.get("/sensors", receiveSensorData);
+// ==========================================
+// ESP32 SENSOR DATA
+// POST /api/iot/sensors
+// ==========================================
+
+router.post(
+    "/sensors",
+    receiveSensorData
+);
 
 
-// ESP32 pump events
-router.get("/pump-event", receivePumpEvent);
+// ==========================================
+// ESP32 PUMP EVENTS
+// POST /api/iot/pump-event
+// ==========================================
+
+router.post(
+    "/pump-event",
+    receivePumpEvent
+);
 
 
 module.exports = router;
