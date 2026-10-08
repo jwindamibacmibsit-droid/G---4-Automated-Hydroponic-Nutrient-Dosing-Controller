@@ -5,7 +5,7 @@ const router = express.Router();
 const {
     receiveSensorData,
     receivePumpEvent
-} = require("../controllers/iotController");
+} = require("../controllers/espController");
 
 
 // ESP32 sensor data
