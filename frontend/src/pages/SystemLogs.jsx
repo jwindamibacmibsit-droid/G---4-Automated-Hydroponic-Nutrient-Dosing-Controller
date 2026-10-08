@@ -1,50 +1,87 @@
-import { useEffect, useMemo, useState } from "react";
+import {
+    useEffect,
+    useMemo,
+    useState
+} from "react";
 
 import Sidebar from "../components/Navbar";
 
 import "../css/system-logs.css";
 
-const API_URL = `${import.meta.env.VITE_API_URL}`;
+const API_URL = import.meta.env.VITE_API_URL;
 
 function SystemLogs() {
-    const [sidebarOpen, setSidebarOpen] = useState(false);
 
-    const [logs, setLogs] = useState([]);
+    // ==========================================
+    // STATE
+    // ==========================================
 
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState("");
+    const [sidebarOpen, setSidebarOpen] =
+        useState(false);
 
-    const [lastUpdated, setLastUpdated] = useState(null);
-    const [lastLogin, setLastLogin] = useState(null);
+    const [logs, setLogs] =
+        useState([]);
 
-    const [searchTerm, setSearchTerm] = useState("");
-    const [severityFilter, setSeverityFilter] = useState("All");
-    const [categoryFilter, setCategoryFilter] = useState("All");
+    const [loading, setLoading] =
+        useState(true);
 
+    const [error, setError] =
+        useState("");
 
-    // =====================================================
+    const [lastUpdated, setLastUpdated] =
+        useState(null);
+
+    const [lastLogin, setLastLogin] =
+        useState(null);
+
+    const [searchTerm, setSearchTerm] =
+        useState("");
+
+    const [severityFilter, setSeverityFilter] =
+        useState("All");
+
+    const [categoryFilter, setCategoryFilter] =
+        useState("All");
+
+    // ==========================================
     // FETCH SYSTEM LOGS
-    // =====================================================
+    // ==========================================
 
     const fetchLogs = async () => {
+
         try {
+
             setLoading(true);
+
             setError("");
 
-            const response = await fetch(`${API_URL}/api/system/logs`);
+            const response = await fetch(
+                `${API_URL}/api/system/logs`
+            );
 
-            const result = await response.json();
+            const result =
+                await response.json();
 
-            if (!response.ok || !result.success) {
+            if (
+                !response.ok ||
+                !result.success
+            ) {
                 throw new Error(
-                    result.message || "Failed to load system logs."
+                    result.message ||
+                    "Failed to load system logs."
                 );
             }
 
-            setLogs(result.data || []);
-            setLastUpdated(new Date());
+            setLogs(
+                result.data || []
+            );
+
+            setLastUpdated(
+                new Date()
+            );
 
         } catch (error) {
+
             console.error(
                 "Failed to load system logs:",
                 error
@@ -57,144 +94,218 @@ function SystemLogs() {
             setLogs([]);
 
         } finally {
+
             setLoading(false);
+
         }
     };
 
-
-    // =====================================================
+    // ==========================================
     // LOAD CURRENT USER / LAST LOGIN
-    // =====================================================
+    // ==========================================
 
     const loadCurrentUser = () => {
-        const storedUser =
-            localStorage.getItem("hydrocontrol_user") ||
-            sessionStorage.getItem("hydrocontrol_user");
 
+        const storedUser =
+            localStorage.getItem(
+                "hydrocontrol_user"
+            ) ||
+            sessionStorage.getItem(
+                "hydrocontrol_user"
+            );
+
+        // No logged-in user
         if (!storedUser) {
+
             setLastLogin(null);
+
             return;
         }
 
         try {
-            const user = JSON.parse(storedUser);
 
-            setLastLogin(user.last_login || null);
+            const user =
+                JSON.parse(storedUser);
+
+            console.log(
+                "CURRENT USER:",
+                user
+            );
+
+            // ======================================
+            // IMPORTANT
+            // ======================================
+            //
+            // Backend returns:
+            //
+            // last_login
+            //
+            // But we also support:
+            //
+            // lastLogin
+            //
+            // in case an older login object exists.
+            //
+
+            setLastLogin(
+                user.last_login ||
+                user.lastLogin ||
+                null
+            );
 
         } catch (error) {
+
             console.error(
                 "Failed to read logged-in user:",
                 error
             );
 
             setLastLogin(null);
+
         }
     };
 
-
-    // =====================================================
+    // ==========================================
     // INITIAL LOAD
-    // =====================================================
+    // ==========================================
 
     useEffect(() => {
+
         loadCurrentUser();
+
         fetchLogs();
+
     }, []);
 
-
-    // =====================================================
-    // FORMAT DATE
-    // =====================================================
+    // ==========================================
+    // FORMAT TIME
+    // ==========================================
 
     const formatTime = (timestamp) => {
+
         if (!timestamp) {
             return "--";
         }
 
-        return new Date(timestamp).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit"
-        });
+        return new Date(
+            timestamp
+        ).toLocaleTimeString(
+            [],
+            {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit"
+            }
+        );
     };
 
+    // ==========================================
+    // FORMAT DATE
+    // ==========================================
 
     const formatDate = (timestamp) => {
+
         if (!timestamp) {
             return "--";
         }
 
-        return new Date(timestamp).toLocaleDateString([], {
-            year: "numeric",
-            month: "short",
-            day: "2-digit"
-        });
+        return new Date(
+            timestamp
+        ).toLocaleDateString(
+            [],
+            {
+                year: "numeric",
+                month: "short",
+                day: "2-digit"
+            }
+        );
     };
 
+    // ==========================================
+    // FORMAT DATE + TIME
+    // ==========================================
 
     const formatDateTime = (timestamp) => {
+
         if (!timestamp) {
             return "--";
         }
 
-        return new Date(timestamp).toLocaleString([], {
-            year: "numeric",
-            month: "short",
-            day: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit"
-        });
+        return new Date(
+            timestamp
+        ).toLocaleString(
+            [],
+            {
+                year: "numeric",
+                month: "short",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit"
+            }
+        );
     };
 
-
-    // =====================================================
+    // ==========================================
     // FILTER SYSTEM LOGS
-    // =====================================================
+    // ==========================================
 
     const filteredLogs = useMemo(() => {
-        const search = searchTerm.toLowerCase();
 
-        return logs.filter((log) => {
+        const search =
+            searchTerm.toLowerCase();
 
-            const matchesSearch =
-                String(log.event || "")
-                    .toLowerCase()
-                    .includes(search) ||
+        return logs.filter(
+            (log) => {
 
-                String(log.details || "")
-                    .toLowerCase()
-                    .includes(search) ||
+                const matchesSearch =
+                    String(
+                        log.event || ""
+                    )
+                        .toLowerCase()
+                        .includes(search) ||
 
-                String(log.category || "")
-                    .toLowerCase()
-                    .includes(search) ||
+                    String(
+                        log.details || ""
+                    )
+                        .toLowerCase()
+                        .includes(search) ||
 
-                String(log.device || "")
-                    .toLowerCase()
-                    .includes(search) ||
+                    String(
+                        log.category || ""
+                    )
+                        .toLowerCase()
+                        .includes(search) ||
 
-                String(log.device_id || "")
-                    .toLowerCase()
-                    .includes(search);
+                    String(
+                        log.device || ""
+                    )
+                        .toLowerCase()
+                        .includes(search) ||
 
+                    String(
+                        log.device_id || ""
+                    )
+                        .toLowerCase()
+                        .includes(search);
 
-            const matchesSeverity =
-                severityFilter === "All" ||
-                log.level === severityFilter;
+                const matchesSeverity =
+                    severityFilter === "All" ||
+                    log.level ===
+                        severityFilter;
 
+                const matchesCategory =
+                    categoryFilter === "All" ||
+                    log.category ===
+                        categoryFilter;
 
-            const matchesCategory =
-                categoryFilter === "All" ||
-                log.category === categoryFilter;
-
-
-            return (
-                matchesSearch &&
-                matchesSeverity &&
-                matchesCategory
-            );
-        });
+                return (
+                    matchesSearch &&
+                    matchesSeverity &&
+                    matchesCategory
+                );
+            }
+        );
 
     }, [
         logs,
@@ -203,47 +314,61 @@ function SystemLogs() {
         categoryFilter
     ]);
 
-
-    // =====================================================
+    // ==========================================
     // SYSTEM STATISTICS
-    // =====================================================
+    // ==========================================
 
-    const totalLogs = logs.length;
+    const totalLogs =
+        logs.length;
 
-    const successLogs = logs.filter(
-        (log) => log.level === "SUCCESS"
-    ).length;
+    const successLogs =
+        logs.filter(
+            (log) =>
+                log.level === "SUCCESS"
+        ).length;
 
-    const warningLogs = logs.filter(
-        (log) => log.level === "WARNING"
-    ).length;
+    const warningLogs =
+        logs.filter(
+            (log) =>
+                log.level === "WARNING"
+        ).length;
 
-    const errorLogs = logs.filter(
-        (log) => log.level === "ERROR"
-    ).length;
-
+    const errorLogs =
+        logs.filter(
+            (log) =>
+                log.level === "ERROR"
+        ).length;
 
     const successPercentage =
         totalLogs > 0
-            ? ((successLogs / totalLogs) * 100).toFixed(1)
+            ? (
+                  (successLogs /
+                      totalLogs) *
+                  100
+              ).toFixed(1)
             : "0.0";
-
 
     const warningPercentage =
         totalLogs > 0
-            ? ((warningLogs / totalLogs) * 100).toFixed(1)
+            ? (
+                  (warningLogs /
+                      totalLogs) *
+                  100
+              ).toFixed(1)
             : "0.0";
-
 
     const errorPercentage =
         totalLogs > 0
-            ? ((errorLogs / totalLogs) * 100).toFixed(1)
+            ? (
+                  (errorLogs /
+                      totalLogs) *
+                  100
+              ).toFixed(1)
             : "0.0";
 
-
-    // =====================================================
+    // ==========================================
     // LEVEL ICON
-    // =====================================================
+    // ==========================================
 
     const getLevelIcon = (level) => {
 
@@ -263,25 +388,32 @@ function SystemLogs() {
         }
     };
 
-
-    // =====================================================
+    // ==========================================
     // RENDER
-    // =====================================================
+    // ==========================================
 
     return (
+
         <div className="logs-page">
+
+            {/* =====================================
+                SIDEBAR
+            ====================================== */}
 
             <Sidebar
                 isOpen={sidebarOpen}
                 setIsOpen={setSidebarOpen}
             />
 
+            {/* =====================================
+                MAIN
+            ====================================== */}
 
             <main className="logs-main">
 
-                {/* =====================================================
+                {/* =================================
                     HEADER
-                ===================================================== */}
+                ================================== */}
 
                 <header className="logs-header">
 
@@ -308,8 +440,10 @@ function SystemLogs() {
                             </h1>
 
                             <p>
-                                Monitor system events, hardware activity,
-                                warnings, and controller operations.
+                                Monitor system events,
+                                hardware activity,
+                                warnings, and
+                                controller operations.
                             </p>
 
                         </div>
@@ -327,10 +461,9 @@ function SystemLogs() {
 
                 </header>
 
-
-                {/* =====================================================
+                {/* =================================
                     SUMMARY CARDS
-                ===================================================== */}
+                ================================== */}
 
                 <section className="logs-stats">
 
@@ -467,10 +600,9 @@ function SystemLogs() {
 
                 </section>
 
-
-                {/* =====================================================
+                {/* =================================
                     SYSTEM HEALTH
-                ===================================================== */}
+                ================================== */}
 
                 <section className="logs-content">
 
@@ -510,6 +642,7 @@ function SystemLogs() {
                                 </div>
 
                                 <div>
+
                                     <span>
                                         ESP32 Controller
                                     </span>
@@ -517,6 +650,7 @@ function SystemLogs() {
                                     <strong>
                                         Online
                                     </strong>
+
                                 </div>
 
                                 <i></i>
@@ -531,6 +665,7 @@ function SystemLogs() {
                                 </div>
 
                                 <div>
+
                                     <span>
                                         Network
                                     </span>
@@ -538,6 +673,7 @@ function SystemLogs() {
                                     <strong>
                                         Connected
                                     </strong>
+
                                 </div>
 
                                 <i></i>
@@ -552,6 +688,7 @@ function SystemLogs() {
                                 </div>
 
                                 <div>
+
                                     <span>
                                         Database
                                     </span>
@@ -559,6 +696,7 @@ function SystemLogs() {
                                     <strong>
                                         Operational
                                     </strong>
+
                                 </div>
 
                                 <i></i>
@@ -573,6 +711,7 @@ function SystemLogs() {
                                 </div>
 
                                 <div>
+
                                     <span>
                                         Power System
                                     </span>
@@ -580,6 +719,7 @@ function SystemLogs() {
                                     <strong>
                                         Stable
                                     </strong>
+
                                 </div>
 
                                 <i></i>
@@ -590,10 +730,9 @@ function SystemLogs() {
 
                     </div>
 
-
-                    {/* =====================================================
+                    {/* =================================
                         SYSTEM INFORMATION
-                    ===================================================== */}
+                    ================================== */}
 
                     <div className="logs-panel system-info-panel">
 
@@ -617,6 +756,7 @@ function SystemLogs() {
                         <div className="system-info-list">
 
                             <div>
+
                                 <span>
                                     Controller
                                 </span>
@@ -624,10 +764,12 @@ function SystemLogs() {
                                 <strong>
                                     ESP32-WROOM-32
                                 </strong>
+
                             </div>
 
 
                             <div>
+
                                 <span>
                                     Firmware
                                 </span>
@@ -635,10 +777,12 @@ function SystemLogs() {
                                 <strong>
                                     v2.4.1
                                 </strong>
+
                             </div>
 
 
                             <div>
+
                                 <span>
                                     Log Records
                                 </span>
@@ -646,19 +790,29 @@ function SystemLogs() {
                                 <strong>
                                     {totalLogs}
                                 </strong>
+
                             </div>
 
+                            {/* =================================
+                                LAST LOGIN
+                            ================================== */}
 
                             <div>
+
                                 <span>
                                     Last Login
                                 </span>
 
                                 <strong>
+
                                     {lastLogin
-                                        ? formatDateTime(lastLogin)
+                                        ? formatDateTime(
+                                              lastLogin
+                                          )
                                         : "No login recorded"}
+
                                 </strong>
+
                             </div>
 
                         </div>
@@ -667,10 +821,9 @@ function SystemLogs() {
 
                 </section>
 
-
-                {/* =====================================================
+                {/* =================================
                     SYSTEM EVENT LOGS
-                ===================================================== */}
+                ================================== */}
 
                 <section className="logs-panel log-history-panel">
 
@@ -692,23 +845,28 @@ function SystemLogs() {
                         <button
                             className="logs-refresh-button"
                             onClick={() => {
+
                                 loadCurrentUser();
+
                                 fetchLogs();
+
                             }}
                             disabled={loading}
                         >
+
                             ↻{" "}
+
                             {loading
                                 ? "Loading..."
                                 : "Refresh"}
+
                         </button>
 
                     </div>
 
-
-                    {/* =================================================
+                    {/* =================================
                         FILTERS
-                    ================================================= */}
+                    ================================== */}
 
                     <div className="logs-toolbar">
 
@@ -721,7 +879,9 @@ function SystemLogs() {
                             <input
                                 type="text"
                                 placeholder="Search system logs..."
-                                value={searchTerm}
+                                value={
+                                    searchTerm
+                                }
                                 onChange={(e) =>
                                     setSearchTerm(
                                         e.target.value
@@ -733,7 +893,9 @@ function SystemLogs() {
 
 
                         <select
-                            value={severityFilter}
+                            value={
+                                severityFilter
+                            }
                             onChange={(e) =>
                                 setSeverityFilter(
                                     e.target.value
@@ -765,7 +927,9 @@ function SystemLogs() {
 
 
                         <select
-                            value={categoryFilter}
+                            value={
+                                categoryFilter
+                            }
                             onChange={(e) =>
                                 setCategoryFilter(
                                     e.target.value
@@ -813,10 +977,9 @@ function SystemLogs() {
 
                     </div>
 
-
-                    {/* =================================================
+                    {/* =================================
                         TABLE
-                    ================================================= */}
+                    ================================== */}
 
                     <div className="logs-table-wrapper">
 
@@ -857,6 +1020,8 @@ function SystemLogs() {
 
                             <tbody>
 
+                                {/* LOADING */}
+
                                 {loading && (
 
                                     <tr>
@@ -872,22 +1037,25 @@ function SystemLogs() {
 
                                 )}
 
+                                {/* ERROR */}
 
-                                {!loading && error && (
+                                {!loading &&
+                                    error && (
 
-                                    <tr>
+                                        <tr>
 
-                                        <td
-                                            colSpan="6"
-                                            className="logs-error"
-                                        >
-                                            {error}
-                                        </td>
+                                            <td
+                                                colSpan="6"
+                                                className="logs-error"
+                                            >
+                                                {error}
+                                            </td>
 
-                                    </tr>
+                                        </tr>
 
-                                )}
+                                    )}
 
+                                {/* LOGS */}
 
                                 {!loading &&
                                     !error &&
@@ -895,7 +1063,9 @@ function SystemLogs() {
                                         (log) => (
 
                                             <tr
-                                                key={log.id}
+                                                key={
+                                                    log.id
+                                                }
                                             >
 
                                                 <td>
@@ -923,7 +1093,8 @@ function SystemLogs() {
 
                                                     <span
                                                         className={`log-level ${String(
-                                                            log.level || "INFO"
+                                                            log.level ||
+                                                                "INFO"
                                                         ).toLowerCase()}`}
                                                     >
 
@@ -933,7 +1104,8 @@ function SystemLogs() {
                                                             )}
                                                         </i>
 
-                                                        {log.level || "INFO"}
+                                                        {log.level ||
+                                                            "INFO"}
 
                                                     </span>
 
@@ -943,8 +1115,10 @@ function SystemLogs() {
                                                 <td>
 
                                                     <span className="log-category">
+
                                                         {log.category ||
                                                             "SYSTEM"}
+
                                                     </span>
 
                                                 </td>
@@ -953,8 +1127,10 @@ function SystemLogs() {
                                                 <td>
 
                                                     <strong className="log-event">
+
                                                         {log.event ||
                                                             "Unknown event"}
+
                                                     </strong>
 
                                                 </td>
@@ -965,14 +1141,16 @@ function SystemLogs() {
                                                     <span className="log-device">
 
                                                         {log.device ||
-                                                            (log.device_id
-                                                                ? `Device #${log.device_id}`
-                                                                : "System")}
+                                                            (
+                                                                log.device_id
+                                                                    ? `Device #${log.device_id}`
+                                                                    : "System"
+                                                            )}
 
                                                     </span>
 
                                                 </td>
-
+                                                
 
                                                 <td>
 
@@ -994,10 +1172,12 @@ function SystemLogs() {
 
                         </table>
 
+                        {/* EMPTY */}
 
                         {!loading &&
                             !error &&
-                            filteredLogs.length === 0 && (
+                            filteredLogs.length ===
+                                0 && (
 
                                 <div className="empty-logs">
 
@@ -1010,7 +1190,8 @@ function SystemLogs() {
                                     </strong>
 
                                     <span>
-                                        Try changing your search
+                                        Try changing
+                                        your search
                                         or filters.
                                     </span>
 
@@ -1020,18 +1201,30 @@ function SystemLogs() {
 
                     </div>
 
+                    {/* =================================
+                        TABLE FOOTER
+                    ================================== */}
 
                     <div className="logs-table-footer">
 
                         <span>
+
                             Showing{" "}
-                            {filteredLogs.length}{" "}
+
+                            {
+                                filteredLogs.length
+                            }{" "}
+
                             of{" "}
+
                             {logs.length} events
+
                         </span>
 
                         <span>
+
                             Last updated:{" "}
+
                             {lastUpdated
                                 ? lastUpdated.toLocaleTimeString(
                                       [],
@@ -1041,16 +1234,16 @@ function SystemLogs() {
                                       }
                                   )
                                 : "--"}
+
                         </span>
 
                     </div>
 
                 </section>
 
-
-                {/* =====================================================
+                {/* =================================
                     FOOTER
-                ===================================================== */}
+                ================================== */}
 
                 <footer className="logs-footer">
 

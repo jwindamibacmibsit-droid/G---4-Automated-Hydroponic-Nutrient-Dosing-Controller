@@ -7,6 +7,10 @@ const API_URL = import.meta.env.VITE_API_URL;
 function Login({ onLogin }) {
     const navigate = useNavigate();
 
+    // ==========================================
+    // STATE
+    // ==========================================
+
     const [showPassword, setShowPassword] = useState(false);
 
     const [formData, setFormData] = useState({
@@ -15,8 +19,14 @@ function Login({ onLogin }) {
     });
 
     const [rememberMe, setRememberMe] = useState(false);
+
     const [error, setError] = useState("");
+
     const [loading, setLoading] = useState(false);
+
+    // ==========================================
+    // HANDLE INPUT
+    // ==========================================
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -29,109 +39,227 @@ function Login({ onLogin }) {
         setError("");
     };
 
-const handleSubmit = async (e) => {
-    e.preventDefault();
+    // ==========================================
+    // LOGIN
+    // ==========================================
 
-    if (!formData.email || !formData.password) {
-        setError("Please enter your email and password.");
-        return;
-    }
+    const handleSubmit = async (e) => {
+        e.preventDefault();
 
-    setError("");
-    setLoading(true);
+        // ==========================================
+        // VALIDATION
+        // ==========================================
 
-    try {
-
-        console.log("API URL:", API_URL);
-
-        const response = await fetch(`${API_URL}/api/auth/login`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify(formData)
-        });
-
-        console.log("HTTP STATUS:", response.status);
-        console.log("STATUS TEXT:", response.statusText);
-
-        const responseText = await response.text();
-
-        if (!responseText.trim()) {
-            throw new Error(
-                `Server returned an empty response. HTTP ${response.status}`
-            );
-        }
-
-        let data;
-
-        try {
-            data = JSON.parse(responseText);
-        } catch (jsonError) {
-            console.error("INVALID JSON RESPONSE:", responseText);
-
-            throw new Error(
-                `Server returned invalid JSON. HTTP ${response.status}`
-            );
-        }
-
-        console.log("LOGIN RESPONSE:", data);
-
-        if (!response.ok || !data.success) {
+        if (
+            !formData.email ||
+            !formData.password
+        ) {
             setError(
-                data.message || "Invalid email or password."
+                "Please enter your email and password."
             );
+
             return;
         }
 
-        const user = data.user;
+        setError("");
+        setLoading(true);
 
-        if (onLogin) {
-            onLogin(user);
-        }
-
-        if (rememberMe) {
-            localStorage.setItem(
-                "hydrocontrol_user",
-                JSON.stringify(user)
+        try {
+            console.log(
+                "API URL:",
+                API_URL
             );
-        } else {
-            sessionStorage.setItem(
-                "hydrocontrol_user",
-                JSON.stringify(user)
+
+            // ==========================================
+            // SEND LOGIN REQUEST
+            // ==========================================
+
+            const response = await fetch(
+                `${API_URL}/api/auth/login`,
+                {
+                    method: "POST",
+
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+
+                    body: JSON.stringify({
+                        email: formData.email,
+                        password: formData.password
+                    })
+                }
             );
+
+            console.log(
+                "HTTP STATUS:",
+                response.status
+            );
+
+            console.log(
+                "STATUS TEXT:",
+                response.statusText
+            );
+
+            // ==========================================
+            // READ RESPONSE
+            // ==========================================
+
+            const responseText =
+                await response.text();
+
+            if (!responseText.trim()) {
+                throw new Error(
+                    `Server returned an empty response. HTTP ${response.status}`
+                );
+            }
+
+            let data;
+
+            try {
+                data = JSON.parse(
+                    responseText
+                );
+            } catch (jsonError) {
+                console.error(
+                    "INVALID JSON RESPONSE:",
+                    responseText
+                );
+
+                throw new Error(
+                    `Server returned invalid JSON. HTTP ${response.status}`
+                );
+            }
+
+            console.log(
+                "LOGIN RESPONSE:",
+                data
+            );
+
+            // ==========================================
+            // LOGIN FAILED
+            // ==========================================
+
+            if (
+                !response.ok ||
+                !data.success
+            ) {
+                setError(
+                    data.message ||
+                    "Invalid email or password."
+                );
+
+                return;
+            }
+
+            // ==========================================
+            // GET USER
+            // ==========================================
+
+            const user = data.user;
+
+            console.log(
+                "LOGGED IN USER:",
+                user
+            );
+
+            console.log(
+                "PREVIOUS LAST LOGIN:",
+                user.last_login
+            );
+
+            // ==========================================
+            // UPDATE APP USER
+            // ==========================================
+
+            if (onLogin) {
+                onLogin(user);
+            }
+
+            // ==========================================
+            // STORE USER
+            // ==========================================
+
+            if (rememberMe) {
+                localStorage.setItem(
+                    "hydrocontrol_user",
+                    JSON.stringify(user)
+                );
+
+                // Remove session copy if it exists
+                sessionStorage.removeItem(
+                    "hydrocontrol_user"
+                );
+            } else {
+                sessionStorage.setItem(
+                    "hydrocontrol_user",
+                    JSON.stringify(user)
+                );
+
+                // Remove local copy if it exists
+                localStorage.removeItem(
+                    "hydrocontrol_user"
+                );
+            }
+
+            // ==========================================
+            // GO TO DASHBOARD
+            // ==========================================
+
+            navigate("/dashboard");
+
+        } catch (error) {
+            console.error(
+                "LOGIN FETCH ERROR:",
+                error
+            );
+
+            setError(
+                `Unable to connect to the HydroControl server: ${error.message}`
+            );
+
+        } finally {
+            setLoading(false);
         }
+    };
 
-        navigate("/dashboard");
-
-    } catch (error) {
-        console.error("LOGIN FETCH ERROR:", error);
-
-        setError(
-            `Unable to connect to the HydroControl server: ${error.message}`
-        );
-
-    } finally {
-        setLoading(false);
-    }
-};
+    // ==========================================
+    // RENDER
+    // ==========================================
 
     return (
         <div className="login-page">
 
-            {/* BACKGROUND DECORATION */}
+            {/* =====================================
+                BACKGROUND
+            ====================================== */}
+
             <div className="login-background">
+
                 <div className="login-orb orb-one"></div>
+
                 <div className="login-orb orb-two"></div>
+
                 <div className="login-orb orb-three"></div>
+
                 <div className="login-grid"></div>
+
             </div>
 
-            {/* LOGIN CONTAINER */}
+            {/* =====================================
+                LOGIN CONTAINER
+            ====================================== */}
+
             <main className="login-container">
 
-                {/* LOGIN CARD */}
+                {/* =================================
+                    LOGIN CARD
+                ================================== */}
+
                 <section className="login-card">
+
+                    {/* =================================
+                        HEADER
+                    ================================== */}
 
                     <div className="login-card-header">
 
@@ -145,18 +273,34 @@ const handleSubmit = async (e) => {
 
                     </div>
 
-                    {/* ERROR */}
+                    {/* =================================
+                        ERROR
+                    ================================== */}
+
                     {error && (
                         <div className="login-error">
-                            <span>⚠</span>
+
+                            <span>
+                                ⚠
+                            </span>
+
                             {error}
+
                         </div>
                     )}
 
-                    {/* FORM */}
-                    <form onSubmit={handleSubmit}>
+                    {/* =================================
+                        FORM
+                    ================================== */}
 
-                        {/* EMAIL */}
+                    <form
+                        onSubmit={handleSubmit}
+                    >
+
+                        {/* =============================
+                            EMAIL
+                        ============================== */}
+
                         <div className="form-group">
 
                             <label htmlFor="email">
@@ -174,8 +318,12 @@ const handleSubmit = async (e) => {
                                     name="email"
                                     type="email"
                                     placeholder="admin@hydrocontrol.com"
-                                    value={formData.email}
-                                    onChange={handleChange}
+                                    value={
+                                        formData.email
+                                    }
+                                    onChange={
+                                        handleChange
+                                    }
                                     autoComplete="email"
                                 />
 
@@ -183,7 +331,10 @@ const handleSubmit = async (e) => {
 
                         </div>
 
-                        {/* PASSWORD */}
+                        {/* =============================
+                            PASSWORD
+                        ============================== */}
+
                         <div className="form-group">
 
                             <div className="password-label-row">
@@ -209,8 +360,12 @@ const handleSubmit = async (e) => {
                                             : "password"
                                     }
                                     placeholder="Enter your password"
-                                    value={formData.password}
-                                    onChange={handleChange}
+                                    value={
+                                        formData.password
+                                    }
+                                    onChange={
+                                        handleChange
+                                    }
                                     autoComplete="current-password"
                                 />
 
@@ -228,21 +383,28 @@ const handleSubmit = async (e) => {
                                             : "Show password"
                                     }
                                 >
-                                    {showPassword ? "--" : "👁"}
+                                    {showPassword
+                                        ? "--"
+                                        : "👁"}
                                 </button>
 
                             </div>
 
                         </div>
 
-                        {/* OPTIONS */}
+                        {/* =============================
+                            OPTIONS
+                        ============================== */}
+
                         <div className="login-options">
 
                             <label className="remember-option">
 
                                 <input
                                     type="checkbox"
-                                    checked={rememberMe}
+                                    checked={
+                                        rememberMe
+                                    }
                                     onChange={(e) =>
                                         setRememberMe(
                                             e.target.checked
@@ -258,7 +420,10 @@ const handleSubmit = async (e) => {
 
                         </div>
 
-                        {/* LOGIN */}
+                        {/* =============================
+                            LOGIN BUTTON
+                        ============================== */}
+
                         <button
                             type="submit"
                             className="login-button"
@@ -266,9 +431,11 @@ const handleSubmit = async (e) => {
                         >
 
                             <span className="login-text">
+
                                 {loading
                                     ? "Signing In..."
                                     : "Sign In"}
+
                             </span>
 
                             <span className="login-arrow">
@@ -279,12 +446,18 @@ const handleSubmit = async (e) => {
 
                     </form>
 
-                    {/* DIVIDER */}
+                    {/* =================================
+                        DIVIDER
+                    ================================== */}
+
                     <div className="login-divider">
+
                         <span>
                             SECURE ACCESS
                         </span>
+
                     </div>
+
                 </section>
 
             </main>
