@@ -4,7 +4,7 @@ import Sidebar from "../components/Navbar";
 
 import "../css/system-logs.css";
 
-const API_URL = `${import.meta.env.VITE_API_URL}/api`;
+const API_URL = `${import.meta.env.VITE_API_URL}`;
 
 function SystemLogs() {
     const [sidebarOpen, setSidebarOpen] = useState(false);
