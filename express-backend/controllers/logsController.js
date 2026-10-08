@@ -20,7 +20,7 @@ const getSystemLogs = async (req, res) => {
                 level,
                 category,
                 event,
-                details,
+                device_id,
             `)
             .order("timestamp", {
                 ascending: false
