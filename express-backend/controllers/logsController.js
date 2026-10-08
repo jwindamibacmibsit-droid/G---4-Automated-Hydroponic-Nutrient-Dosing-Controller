@@ -1,71 +1,69 @@
 const supabase = require("../config/supabase");
 
+
+// =====================================================
 // GET SYSTEM LOGS
+// =====================================================
+
 const getSystemLogs = async (req, res) => {
     try {
-        const { data, error } = await supabase
+
+        const {
+            data,
+            error
+        } = await supabase
             .from("system_logs")
             .select(`
                 id,
                 user_id,
-                device_id,
+                timestamp,
                 level,
                 category,
                 event,
+                device,
                 details,
-                timestamp,
-                users (
-                    email
-                ),
-                devices (
-                    device_name
-                )
+                created_at
             `)
             .order("timestamp", {
                 ascending: false
             })
-            .limit(100);
+            .limit(500);
+
 
         if (error) {
-            console.error("SUPABASE SYSTEM LOG ERROR:", error);
+
+            console.error(
+                "SUPABASE SYSTEM LOGS ERROR:",
+                error
+            );
 
             return res.status(500).json({
                 success: false,
-                message: "Failed to retrieve system logs.",
+                message: "Failed to load system logs.",
                 error: error.message
             });
         }
 
-        const logs = data.map((log) => ({
-            id: log.id,
-            user_id: log.user_id,
-            user_email: log.users?.email || null,
 
-            device_id: log.device_id,
-            device: log.devices?.device_name || null,
-
-            level: log.level,
-            category: log.category,
-            event: log.event,
-            details: log.details,
-            timestamp: log.timestamp
-        }));
-
-        res.status(200).json({
+        return res.status(200).json({
             success: true,
-            count: logs.length,
-            data: logs
+            data: data || []
         });
 
     } catch (error) {
-        console.error("SYSTEM LOG SERVER ERROR:", error);
 
-        res.status(500).json({
+        console.error(
+            "GET SYSTEM LOGS ERROR:",
+            error
+        );
+
+        return res.status(500).json({
             success: false,
-            message: "Failed to retrieve system logs."
+            message: "Server error while loading system logs."
         });
     }
 };
+
 
 module.exports = {
     getSystemLogs
