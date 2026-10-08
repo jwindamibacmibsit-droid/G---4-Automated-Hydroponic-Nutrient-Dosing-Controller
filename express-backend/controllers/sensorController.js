@@ -58,7 +58,7 @@ const getLatestReading = async (req, res) => {
                     reading.water_level !== null
                         ? Number(reading.water_level)
                         : null,
-                        
+
                 nutrient_a:
                     reading.nutrient_a !== null
                         ? Number(reading.nutrient_a)
@@ -136,11 +136,7 @@ const getSensorHistory = async (req, res) => {
                         ? Number(reading.water_level)
                         : null,
 
-                temperature:
-                    reading.temperature !== null
-                        ? Number(reading.temperature)
-                        : null,
-
+                        
                 nutrient_a:
                     reading.nutrient_a !== null
                         ? Number(reading.nutrient_a)
