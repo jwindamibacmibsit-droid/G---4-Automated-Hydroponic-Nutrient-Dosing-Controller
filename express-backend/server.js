@@ -33,7 +33,7 @@ const corsOptions = {
         "Content-Type",
         "Authorization"
     ],
-    credentials: false,
+    credentials: true,
     optionsSuccessStatus: 204
 };
 
