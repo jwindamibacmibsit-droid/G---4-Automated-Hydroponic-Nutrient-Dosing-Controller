@@ -9,11 +9,11 @@ const {
 
 
 // ESP32 sensor data
-router.post("/sensors", receiveSensorData);
+router.get("/sensors", receiveSensorData);
 
 
 // ESP32 pump events
-router.post("/pump-event", receivePumpEvent);
+router.get("/pump-event", receivePumpEvent);
 
 
 module.exports = router;
