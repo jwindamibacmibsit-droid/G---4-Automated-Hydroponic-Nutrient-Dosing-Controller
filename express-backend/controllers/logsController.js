@@ -1,9 +1,9 @@
-const pool = require("../config/supabase");
+const supabase = require("../config/supabase");
 
 // GET SYSTEM LOGS
 const getSystemLogs = async (req, res) => {
     try {
-        const result = await pool.query(`
+        const result = await supabase.query(`
             SELECT
                 sl.id,
                 sl.user_id,
