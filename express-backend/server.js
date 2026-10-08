@@ -9,7 +9,7 @@ const supabase = require("./config/supabase");
 const authRoutes = require("./routes/authRoutes");
 const healthRoutes = require("./routes/healthRoutes");
 const sensorRoutes = require("./routes/sensorRoutes");
-const logRoutes = require("./routes/logRoutes");
+
 
 
 const app = express();
@@ -44,7 +44,7 @@ app.use(express.json())
 app.use("/api/auth", authRoutes);
 app.use("/api/sensors", sensorRoutes);
 app.use("/api/health", healthRoutes);
-app.use("/api/system", logRoutes);
+
 
 
 
