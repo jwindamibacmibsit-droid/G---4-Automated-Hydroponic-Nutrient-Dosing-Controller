@@ -21,7 +21,6 @@ const getSystemLogs = async (req, res) => {
                 category,
                 event,
                 details,
-                created_at
             `)
             .order("timestamp", {
                 ascending: false
