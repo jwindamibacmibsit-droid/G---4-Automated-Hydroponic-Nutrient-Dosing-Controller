@@ -31,7 +31,7 @@ function SystemLogs() {
             setLoading(true);
             setError("");
 
-            const response = await fetch(`${API_URL}/api/logs`);
+            const response = await fetch(`${API_URL}/api/system-logs`);
 
             const result = await response.json();
 

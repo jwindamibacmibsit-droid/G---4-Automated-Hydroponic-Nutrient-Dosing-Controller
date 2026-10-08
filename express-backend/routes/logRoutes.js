@@ -8,7 +8,7 @@ const {
 
 
 // GET /api/logs
-router.get("/", getSystemLogs);
+router.get("/logs", getSystemLogs);
 
 
 module.exports = router;
