@@ -5,7 +5,7 @@ const supabase = require("../config/supabase");
 const DEVICE_UID =
     process.env.DEVICE_UID || "ESP32-HYDRO-001";
 
-const DEVICE_API_KEY = process.env.DEVICE_API_KEY || "sk_live_a12";
+const DEVICE_API_KEY = process.env.DEVICE_API_KEY || "1578d8bde8d521949ce8495618a32791f48cb0c70ff59c474da5da022a860374";
 
 // ========================================
 // ESP32 AUTHENTICATION
