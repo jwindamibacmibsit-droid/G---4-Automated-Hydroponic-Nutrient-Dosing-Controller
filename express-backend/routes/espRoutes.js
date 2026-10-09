@@ -5,13 +5,13 @@ const router = express.Router();
 const {
     receiveSensorData,
     getNextPumpCommand,
-    receivePumpResult
+    reportPumpResult
 } = require("../controllers/espController");
 
 router.post("/sensors", receiveSensorData);
 
 router.get("/commands/next", getNextPumpCommand);
 
-router.post("/commands/:id/result", receivePumpResult);
+router.post("/commands/:id/result", reportPumpResult);
 
 module.exports = router;
