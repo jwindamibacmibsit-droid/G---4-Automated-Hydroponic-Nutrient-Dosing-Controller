@@ -5,7 +5,7 @@ const router = express.Router();
 const {
     receiveSensorData,
     getNextPumpCommand,
-    receivePumpResult,
+    receivePumpResult
 } = require("../controllers/espController");
 
 router.post("/sensors", receiveSensorData);
