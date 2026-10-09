@@ -7,7 +7,7 @@ import {
 } from "react";
 
 import Sidebar from "../components/Navbar";
-import "../css/system-logs.css";
+import "../css/system_logs.css";
 
 const API_URL = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 const LOGS_URL = `${API_URL}/api/system/logs`;
