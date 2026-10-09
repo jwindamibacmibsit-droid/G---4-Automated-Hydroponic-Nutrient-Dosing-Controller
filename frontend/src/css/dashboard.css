@@ -166,6 +166,370 @@ body {
 .water-level strong { position:absolute; right:16px; top:17px; font-family:"Space Grotesk",sans-serif; font-size:22px; }
 .water-wave { position:absolute; top:-7px; width:150%; height:16px; border-radius:50%; border-top:2px solid rgba(157,244,207,.35); animation:wave 5s linear infinite; }
 .wave-two { left:-45%; animation-duration:7s; opacity:.45; }
+
+/* ========================================
+   HYDROCONTROL DASHBOARD UPDATES
+======================================== */
+
+.dashboard-overview {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    margin: 24px 0 18px;
+    padding: 22px 24px;
+    border: 1px solid rgba(120, 180, 155, 0.18);
+    border-radius: 18px;
+    background: var(--card-bg, rgba(20, 36, 31, 0.75));
+}
+
+.dashboard-overview h2 {
+    margin: 8px 0;
+    font-size: clamp(18px, 2vw, 24px);
+}
+
+.dashboard-overview p {
+    margin: 0;
+    opacity: 0.72;
+    font-size: 13px;
+}
+
+.dashboard-overview .sensor-status {
+    white-space: nowrap;
+}
+
+.sensor-status.unavailable {
+    color: #a7b0b5;
+    background: rgba(148, 163, 184, 0.1);
+}
+
+.sensor-status.unavailable i {
+    background: #94a3b8;
+}
+
+.sensor-status.warning {
+    color: #fbbf24;
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.sensor-status.warning i {
+    background: #f59e0b;
+}
+
+.sensor-status.normal {
+    color: #34d399;
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.sensor-status.normal i {
+    background: #10b981;
+}
+
+/* Four actual sensor measurements */
+
+.sensor-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 18px;
+}
+
+.sensor-card {
+    position: relative;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.sensor-card .sensor-value {
+    overflow-wrap: anywhere;
+    font-variant-numeric: tabular-nums;
+}
+
+.sensor-card .sensor-value > span {
+    margin-left: 5px;
+    font-size: 13px;
+}
+
+/* Reservoir */
+
+.reservoir-panel {
+    display: grid;
+    grid-template-columns: minmax(180px, 0.8fr) minmax(0, 1.5fr);
+    align-items: center;
+    gap: 36px;
+    padding: 28px 10px;
+}
+
+.reservoir-gauge {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 240px;
+    overflow: hidden;
+    isolation: isolate;
+    border: 1px solid rgba(110, 210, 180, 0.25);
+    border-radius: 18px;
+    background:
+        linear-gradient(
+            180deg,
+            rgba(13, 35, 31, 0.96),
+            rgba(7, 19, 25, 0.98)
+        );
+}
+
+.reservoir-gauge::before {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent calc(25% - 1px),
+        rgba(255, 255, 255, 0.1) calc(25% - 1px),
+        rgba(255, 255, 255, 0.1) 25%
+    );
+    content: "";
+}
+
+.reservoir-gauge-fill {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: -1;
+    background: linear-gradient(
+        180deg,
+        rgba(45, 212, 191, 0.65),
+        rgba(8, 145, 178, 0.48)
+    );
+    transition: height 700ms ease;
+}
+
+.reservoir-gauge-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 16px;
+    text-align: center;
+}
+
+.reservoir-gauge-content strong {
+    font-size: clamp(30px, 4vw, 44px);
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+.reservoir-gauge-content span {
+    font-size: 12px;
+    opacity: 0.8;
+}
+
+.reservoir-details {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.reservoir-details > div {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    min-width: 0;
+    padding: 18px;
+    border: 1px solid rgba(120, 180, 155, 0.16);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.025);
+}
+
+.reservoir-details > div > span {
+    font-size: 12px;
+    opacity: 0.7;
+}
+
+.reservoir-details > div > strong {
+    overflow-wrap: anywhere;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+}
+
+.summary-details {
+    margin-top: 20px;
+}
+
+.system-stats strong {
+    overflow-wrap: anywhere;
+    font-size: 12px;
+}
+
+/* Two real sensor charts */
+
+.charts-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+    margin-top: 22px;
+}
+
+.chart-card,
+.quick-status-card {
+    min-width: 0;
+}
+
+.chart-wrap {
+    min-height: 300px;
+}
+
+.chart-period {
+    font-size: 11px;
+    white-space: nowrap;
+    opacity: 0.7;
+}
+
+.chart-empty {
+    display: flex;
+    min-height: 280px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    text-align: center;
+}
+
+.chart-empty > span {
+    font-size: 36px;
+    opacity: 0.45;
+}
+
+.chart-empty p {
+    margin: 10px 0 4px;
+    font-weight: 600;
+}
+
+.chart-empty small {
+    opacity: 0.65;
+}
+
+/* Component list */
+
+.component-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.component-item > div:nth-child(2) {
+    flex: 1;
+    min-width: 0;
+}
+
+.component-item strong,
+.component-item span {
+    display: block;
+}
+
+.component-item span {
+    overflow-wrap: anywhere;
+}
+
+.component-item b {
+    flex-shrink: 0;
+    font-size: 10px;
+}
+
+.component-item b.online {
+    color: #34d399;
+}
+
+.component-item b.offline-label {
+    color: #fbbf24;
+}
+
+.dashboard-error {
+    margin: 16px 0;
+    padding: 14px 16px;
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    border-radius: 12px;
+    background: rgba(127, 29, 29, 0.15);
+    color: #fca5a5;
+    overflow-wrap: anywhere;
+}
+
+.device-last-seen {
+    margin-top: 18px;
+    font-size: 12px;
+    opacity: 0.7;
+}
+
+/* Responsive */
+
+@media (max-width: 1100px) {
+    .sensor-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .reservoir-panel {
+        gap: 22px;
+    }
+}
+
+@media (max-width: 760px) {
+    .dashboard-overview {
+        align-items: flex-start;
+        flex-direction: column;
+        padding: 18px;
+    }
+
+    .charts-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .reservoir-panel {
+        grid-template-columns: minmax(0, 1fr);
+        padding: 20px 0;
+    }
+
+    .reservoir-gauge {
+        min-height: 210px;
+    }
+
+    .chart-period {
+        white-space: normal;
+        text-align: right;
+    }
+}
+
+@media (max-width: 480px) {
+    .sensor-grid {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
+    }
+
+    .reservoir-details {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .system-stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .chart-header {
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .chart-wrap {
+        min-height: 260px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .reservoir-gauge-fill {
+        transition: none;
+    }
+}
+
 @keyframes wave { from{transform:translateX(-30%)} to{transform:translateX(10%)} }
 .tank-measure { position:absolute; right:7px; color:rgba(201,235,220,.38); font-size:8px; }
 .tank-measure.top{top:7px}.tank-measure.mid{top:49%}.tank-measure.bottom{bottom:5px}.tank-base{height:25px;border-radius:4px 4px 10px 10px;font-size:8px;}

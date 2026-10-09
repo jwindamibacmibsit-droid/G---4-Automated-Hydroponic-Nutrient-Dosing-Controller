@@ -1,13 +1,17 @@
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+    useCallback,
+    useEffect,
+    useMemo,
+    useState,
+} from "react";
+
 import Sidebar from "../components/Navbar";
 import "../css/dashboard.css";
 
 import {
     Area,
     AreaChart,
-    Bar,
-    BarChart,
     CartesianGrid,
     Legend,
     ResponsiveContainer,
@@ -20,14 +24,32 @@ const API_URL = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
 const REFRESH_MS = 5000;
 
 const toNumber = (value) => {
-    if (value === null || value === undefined || value === "") return null;
+    if (
+        value === null ||
+        value === undefined ||
+        value === ""
+    ) {
+        return null;
+    }
+
     const number = Number(value);
+
     return Number.isFinite(number) ? number : null;
+};
+
+const validPH = (value) => {
+    const number = toNumber(value);
+
+    return number !== null && number >= 0 && number <= 14
+        ? number
+        : null;
 };
 
 const formatTime = (timestamp) => {
     if (!timestamp) return "--:--";
+
     const date = new Date(timestamp);
+
     if (Number.isNaN(date.getTime())) return "--:--";
 
     return date.toLocaleTimeString([], {
@@ -36,174 +58,327 @@ const formatTime = (timestamp) => {
     });
 };
 
-const getStatus = (value, min, max) => {
-    if (value === null) return "offline";
-    return value >= min && value <= max ? "normal" : "warning";
+const formatDateTime = (timestamp) => {
+    if (!timestamp) return "Not available";
+
+    const date = new Date(timestamp);
+
+    return Number.isNaN(date.getTime())
+        ? "Not available"
+        : date.toLocaleString();
 };
 
-async function fetchJson(path) {
-    const response = await fetch(`${API_URL}${path}`);
+const getWaterStatus = (value) => {
+    if (value === null) return "unavailable";
+    if (value < 30) return "warning";
+    return "normal";
+};
+
+const getPHStatus = (value) => {
+    if (value === null) return "unavailable";
+
+    // General hydroponic reference range.
+    // Adjust for your crop and nutrient solution.
+    return value >= 5.5 && value <= 6.5
+        ? "normal"
+        : "warning";
+};
+
+const statusLabels = {
+    normal: "Normal",
+    warning: "Check level",
+    unavailable: "Unavailable",
+    online: "Online",
+    offline: "Offline",
+    unknown: "Unknown",
+};
+
+async function fetchJson(path, signal) {
+    const response = await fetch(`${API_URL}${path}`, {
+        signal,
+        headers: {
+            Accept: "application/json",
+        },
+    });
+
     let body;
 
     try {
         body = await response.json();
     } catch {
-        throw new Error(`Invalid server response (${response.status})`);
+        throw new Error(
+            `Invalid server response (${response.status})`
+        );
     }
 
     if (!response.ok || body?.success === false) {
-        throw new Error(body?.message || `Request failed (${response.status})`);
+        throw new Error(
+            body?.message || `Request failed (${response.status})`
+        );
     }
 
     return body;
 }
 
+function MetricCard({
+    icon,
+    title,
+    value,
+    unit,
+    status,
+    description,
+}) {
+    return (
+        <article className="sensor-card">
+            <div className="sensor-card-glow" />
+
+            <div className="sensor-card-top">
+                <div className="sensor-icon" aria-hidden="true">
+                    {icon}
+                </div>
+
+                <span className={`sensor-status ${status}`}>
+                    <i />
+                    {statusLabels[status] || status}
+                </span>
+            </div>
+
+            <span className="sensor-title">{title}</span>
+
+            <div className="sensor-value">
+                {value}
+                <span>{unit}</span>
+            </div>
+
+            <p className="sensor-description">{description}</p>
+        </article>
+    );
+}
+
+function ChartEmpty({ message }) {
+    return (
+        <div className="chart-empty">
+            <span aria-hidden="true">⌁</span>
+            <p>{message}</p>
+            <small>Waiting for sensor readings</small>
+        </div>
+    );
+}
+
 function Dashboard() {
     const [sidebarOpen, setSidebarOpen] = useState(false);
+
     const [latest, setLatest] = useState(null);
     const [history, setHistory] = useState([]);
+
     const [loading, setLoading] = useState(true);
     const [apiOffline, setApiOffline] = useState(false);
-    const [deviceStatus, setDeviceStatus] = useState("unknown");
-    const [deviceLastSeen, setDeviceLastSeen] = useState(null);
-    const [lastUpdated, setLastUpdated] = useState(null);
     const [errorMessage, setErrorMessage] = useState("");
 
-    const fetchSensorData = useCallback(async () => {
+    const [deviceStatus, setDeviceStatus] = useState("unknown");
+    const [deviceLastSeen, setDeviceLastSeen] = useState(null);
+
+    const [lastUpdated, setLastUpdated] = useState(null);
+
+    const fetchDashboardData = useCallback(async (signal) => {
         try {
             const [latestResult, historyResult] = await Promise.all([
-                fetchJson("/api/sensors/latest"),
-                fetchJson("/api/sensors/history"),
+                fetchJson("/api/sensors/latest", signal),
+                fetchJson("/api/sensors/history?limit=50", signal),
             ]);
 
-            if (!latestResult.data) {
-                throw new Error("No latest sensor reading returned");
-            }
-
             if (!Array.isArray(historyResult.data)) {
-                throw new Error("Sensor history response is not an array");
+                throw new Error("Invalid sensor history response");
             }
 
-            setLatest(latestResult.data);
+            // An empty database is not an API failure.
+            setLatest(latestResult.data || null);
             setHistory(historyResult.data);
+
             setApiOffline(false);
             setErrorMessage("");
             setLastUpdated(new Date());
         } catch (error) {
-            console.error("Dashboard sensor error:", error);
+            if (error.name === "AbortError") return;
+
+            console.error("Dashboard data error:", error);
+
             setApiOffline(true);
-            setErrorMessage(error.message || "Unable to connect to the API");
+            setErrorMessage(
+                error.message || "Unable to connect to the backend"
+            );
         } finally {
-            setLoading(false);
+            if (!signal.aborted) {
+                setLoading(false);
+            }
         }
     }, []);
 
-    const fetchDeviceStatus = useCallback(async () => {
+    const fetchDeviceStatus = useCallback(async (signal) => {
         try {
-            const result = await fetchJson("/api/sensors/device-status");
+            const result = await fetchJson(
+                "/api/sensors/device-status",
+                signal
+            );
 
-            // Supports either { data: { status, last_seen } }
-            // or { device: { status, last_seen } } API responses.
-            const device = result.data || result.device || {};
+            const device = result.device || result.data || {};
 
             setDeviceStatus(
-                device.status || (result.online ? "online" : "unknown")
+                device.status ||
+                (result.online ? "online" : "offline")
             );
+
             setDeviceLastSeen(device.last_seen || null);
         } catch (error) {
+            if (error.name === "AbortError") return;
+
             console.error("Device status error:", error);
             setDeviceStatus("unknown");
         }
     }, []);
 
     useEffect(() => {
+        let controller;
         let active = true;
+        let timer;
 
         const refresh = async () => {
             if (!active) return;
 
+            // Cancel a previous refresh if it is still running.
+            controller?.abort();
+            controller = new AbortController();
+
             await Promise.all([
-                fetchSensorData(),
-                fetchDeviceStatus(),
+                fetchDashboardData(controller.signal),
+                fetchDeviceStatus(controller.signal),
             ]);
+
+            if (active) {
+                timer = window.setTimeout(refresh, REFRESH_MS);
+            }
         };
 
         refresh();
 
-        const interval = window.setInterval(refresh, REFRESH_MS);
-
         return () => {
             active = false;
-            window.clearInterval(interval);
+            controller?.abort();
+            window.clearTimeout(timer);
         };
-    }, [fetchSensorData, fetchDeviceStatus]);
+    }, [fetchDashboardData, fetchDeviceStatus]);
 
-    const values = useMemo(() => ({
-        waterLevel: toNumber(latest?.water_level),
-        nutrientA: toNumber(latest?.nutrient_a),
-        nutrientB: toNumber(latest?.nutrient_b),
-    }), [latest]);
+    // ----------------------------------------
+    // NORMALIZE LATEST DATABASE READING
+    // ----------------------------------------
+    const values = useMemo(() => {
+        const ph = validPH(latest?.ph_value ?? latest?.ph);
 
-    const nutrientData = useMemo(
-        () =>
-            history.map((reading) => ({
+        const waterPercentage = toNumber(
+            latest?.water_percentage ?? latest?.water_level
+        );
+
+        const waterLevelCm = toNumber(latest?.water_level_cm);
+        const waterDistanceCm = toNumber(
+            latest?.water_distance_cm
+        );
+
+        return {
+            ph,
+            waterPercentage:
+                waterPercentage !== null &&
+                waterPercentage >= 0 &&
+                waterPercentage <= 100
+                    ? waterPercentage
+                    : null,
+            waterLevelCm,
+            waterDistanceCm,
+        };
+    }, [latest]);
+
+    // ----------------------------------------
+    // NORMALIZE HISTORICAL READINGS
+    // ----------------------------------------
+    const chartData = useMemo(() => {
+        return history.map((reading, index) => {
+            const percentage = toNumber(
+                reading.water_percentage ?? reading.water_level
+            );
+
+            const ph = validPH(
+                reading.ph_value ?? reading.ph
+            );
+
+            return {
+                id: reading.id ?? `${reading.timestamp}-${index}`,
                 time: formatTime(reading.timestamp),
-                nutrientA: toNumber(reading.nutrient_a),
-                nutrientB: toNumber(reading.nutrient_b),
-            })),
-        [history]
-    );
+                timestamp: reading.timestamp,
+                waterPercentage:
+                    percentage !== null &&
+                    percentage >= 0 &&
+                    percentage <= 100
+                        ? percentage
+                        : null,
+                ph,
+            };
+        });
+    }, [history]);
 
-    // Demonstration values only; these are not actual pump telemetry.
-    const pumpData = useMemo(() => [
-        { name: "Water", runtime: 82 },
-        { name: "Nutrient A", runtime: 64 },
-        { name: "Nutrient B", runtime: 48 },
-        { name: "Circulation", runtime: 71 },
-    ], []);
+    const deviceOnline = deviceStatus === "online";
 
-    const nutrientAverage =
-        values.nutrientA !== null && values.nutrientB !== null
-            ? ((values.nutrientA + values.nutrientB) / 2).toFixed(0)
-            : "--";
+    const hasLatestReading = latest !== null;
+
+    const waterStatus = getWaterStatus(values.waterPercentage);
+    const phStatus = getPHStatus(values.ph);
 
     const cards = [
         {
             icon: "◌",
             title: "Water Level",
-            value: values.waterLevel?.toFixed(0) ?? "--",
+            value: values.waterPercentage === null
+                ? "--"
+                : values.waterPercentage.toFixed(1),
             unit: "%",
-            status: getStatus(values.waterLevel, 30, 100),
-            description: "Reservoir capacity",
+            status: waterStatus,
+            description: "Measured reservoir capacity",
         },
         {
             icon: "✦",
-            title: "Nutrient Average",
-            value: nutrientAverage,
-            unit: "%",
-            status:
-                nutrientAverage === "--"
-                    ? "offline"
-                    : getStatus(Number(nutrientAverage), 40, 100),
-            description: "Nutrient A + B average",
+            title: "pH Level",
+            value: values.ph === null
+                ? "--"
+                : values.ph.toFixed(2),
+            unit: "pH",
+            status: phStatus,
+            description: values.ph === null
+                ? "Sensor reading unavailable"
+                : "Reference range: 5.5–6.5",
+        },
+        {
+            icon: "↕",
+            title: "Water Height",
+            value: values.waterLevelCm === null
+                ? "--"
+                : values.waterLevelCm.toFixed(1),
+            unit: "cm",
+            status: values.waterLevelCm === null
+                ? "unavailable"
+                : "normal",
+            description: "Water height inside reservoir",
+        },
+        {
+            icon: "⌁",
+            title: "Sensor Distance",
+            value: values.waterDistanceCm === null
+                ? "--"
+                : values.waterDistanceCm.toFixed(1),
+            unit: "cm",
+            status: values.waterDistanceCm === null
+                ? "unavailable"
+                : "normal",
+            description: "Ultrasonic sensor to water surface",
         },
     ];
-
-    const statusText = {
-        normal: "Normal",
-        warning: "Warning",
-        offline: "Unavailable",
-    };
-
-    const renderChartEmpty = (message) => (
-        <div className="chart-empty">
-            <span>⌁</span>
-            <p>{message}</p>
-            <small>Waiting for sensor readings</small>
-        </div>
-    );
-
-    const deviceOnline = deviceStatus === "online";
 
     return (
         <div className="dashboard-shell">
@@ -218,30 +393,45 @@ function Dashboard() {
                     type="button"
                     onClick={() => setSidebarOpen((open) => !open)}
                     aria-label="Toggle navigation"
+                    aria-expanded={sidebarOpen}
                 >
                     ☰
                 </button>
 
+                {/* HEADER */}
                 <header className="dashboard-header">
                     <div className="header-copy">
-                        <h1>Hydroponic Environment</h1>
-                        <p>Live sensor readings and device connectivity</p>
+                        <span className="section-label">
+                            HYDROCONTROL / MONITORING
+                        </span>
+
+                        <h1>Hydroponic Dashboard</h1>
+
+                        <p>
+                            Real-time reservoir measurements and ESP32
+                            connectivity.
+                        </p>
                     </div>
 
                     <div
                         className={`system-status ${
                             apiOffline ? "is-offline" : ""
                         }`}
+                        role="status"
                     >
                         <span className="status-dot" />
+
                         <div>
                             <strong>
-                                {apiOffline ? "API Offline" : "API Online"}
+                                {apiOffline
+                                    ? "API Offline"
+                                    : "API Connected"}
                             </strong>
+
                             <small>
                                 {apiOffline
-                                    ? "Cannot load sensor data"
-                                    : "Backend is responding"}
+                                    ? "Unable to retrieve dashboard data"
+                                    : "Sensor API responding"}
                             </small>
                         </div>
                     </div>
@@ -253,171 +443,202 @@ function Dashboard() {
                     </div>
                 )}
 
-                <section className="sensor-grid">
+                {/* DEVICE OVERVIEW */}
+                <section className="dashboard-overview">
+                    <div>
+                        <span className="section-label">
+                            DEVICE STATUS
+                        </span>
+
+                        <h2>ESP32 Hydroponic Controller</h2>
+
+                        <p>
+                            Device ID:{" "}
+                            <strong>
+                                {latest?.device_uid ||
+                                    "ESP32-HYDRO-001"}
+                            </strong>
+                        </p>
+                    </div>
+
+                    <span
+                        className={`sensor-status ${
+                            deviceOnline ? "normal" : "warning"
+                        }`}
+                    >
+                        <i />
+                        {statusLabels[deviceStatus] || "Unknown"}
+                    </span>
+                </section>
+
+                {/* SENSOR CARDS */}
+                <section
+                    className="sensor-grid"
+                    aria-label="Current sensor measurements"
+                >
                     {cards.map((card) => (
-                        <article className="sensor-card" key={card.title}>
-                            <div className="sensor-card-glow" />
-
-                            <div className="sensor-card-top">
-                                <div className="sensor-icon">
-                                    {card.icon}
-                                </div>
-
-                                <span className={`sensor-status ${card.status}`}>
-                                    <i />
-                                    {statusText[card.status]}
-                                </span>
-                            </div>
-
-                            <span className="sensor-title">
-                                {card.title}
-                            </span>
-
-                            <div className="sensor-value">
-                                {loading && !latest ? "--" : card.value}
-                                <span>{card.unit}</span>
-                            </div>
-
-                            <p className="sensor-description">
-                                {card.description}
-                            </p>
-                        </article>
+                        <MetricCard
+                            key={card.title}
+                            {...card}
+                            value={
+                                loading && !hasLatestReading
+                                    ? "--"
+                                    : card.value
+                            }
+                        />
                     ))}
                 </section>
 
+                {/* LIVE RESERVOIR */}
                 <section className="system-3d-card">
                     <div className="system-3d-header">
                         <div>
                             <span className="section-label">
-                                LIVE SYSTEM MODEL
+                                LIVE RESERVOIR
                             </span>
-                            <h2>3D Hydroponic Overview</h2>
+
+                            <h2>Water Level Overview</h2>
+
                             <p>
-                                Reservoir and grow-channel status at a glance.
+                                The reservoir indicator follows the
+                                latest recorded water percentage.
                             </p>
                         </div>
 
                         <span className="live-badge">
-                            <i /> LIVE
+                            <i />
+                            {apiOffline ? "NO CONNECTION" : "LIVE"}
                         </span>
                     </div>
 
-                    <div className="hydroponic-visual">
-                        <div className="grid-floor" />
-                        <div className="tank-shadow" />
+                    <div className="reservoir-panel">
+                        <div className="reservoir-gauge">
+                            <div
+                                className="reservoir-gauge-fill"
+                                style={{
+                                    height: `${
+                                        values.waterPercentage ?? 0
+                                    }%`,
+                                }}
+                            />
 
-                        <div className="water-tank">
-                            <div className="tank-lid">RESERVOIR</div>
+                            <div className="reservoir-gauge-content">
+                                <strong>
+                                    {values.waterPercentage === null
+                                        ? "--"
+                                        : `${values.waterPercentage.toFixed(1)}%`}
+                                </strong>
 
-                            <div className="tank-glass">
-                                <div
-                                    className="water-level"
-                                    style={{
-                                        height: `${
-                                            Math.min(
-                                                100,
-                                                Math.max(
-                                                    0,
-                                                    values.waterLevel ?? 0
-                                                )
-                                            )
-                                        }%`,
-                                    }}
-                                >
-                                    <div className="water-wave wave-one" />
-                                    <div className="water-wave wave-two" />
-
-                                    <strong>
-                                        {values.waterLevel !== null
-                                            ? `${values.waterLevel.toFixed(0)}%`
-                                            : "--"}
-                                    </strong>
-                                </div>
-
-                                <span className="tank-measure top">100%</span>
-                                <span className="tank-measure mid">50%</span>
-                                <span className="tank-measure bottom">0%</span>
+                                <span>Reservoir capacity</span>
                             </div>
                         </div>
 
-                        <div className="grow-rack">
-                            {["A", "B", "C"].map((row) => (
-                                <div className="grow-row" key={row}>
-                                    <span className="plant plant-a">🌿</span>
-                                    <span className="plant plant-b">🌱</span>
-                                    <span className="plant plant-c">🌿</span>
-                                    <span className="grow-channel" />
-                                    <b>{row}</b>
-                                </div>
-                            ))}
-                        </div>
+                        <div className="reservoir-details">
+                            <div>
+                                <span>Water height</span>
+                                <strong>
+                                    {values.waterLevelCm === null
+                                        ? "--"
+                                        : `${values.waterLevelCm.toFixed(2)} cm`}
+                                </strong>
+                            </div>
 
-                        <div className="pipe pipe-one" />
-                        <div className="pipe pipe-two" />
-                        <div className="pipe pipe-three" />
+                            <div>
+                                <span>Sensor distance</span>
+                                <strong>
+                                    {values.waterDistanceCm === null
+                                        ? "--"
+                                        : `${values.waterDistanceCm.toFixed(2)} cm`}
+                                </strong>
+                            </div>
 
-                        <div className="pump-unit">
-                            <span className="pump-light" />
-                            <strong>PUMP</strong>
-                            <small>
-                                {deviceOnline
-                                    ? "DEVICE ONLINE"
-                                    : "CHECK DEVICE"}
-                            </small>
+                            <div>
+                                <span>Last measurement</span>
+                                <strong>
+                                    {formatDateTime(latest?.timestamp)}
+                                </strong>
+                            </div>
+
+                            <div>
+                                <span>Last ESP32 heartbeat</span>
+                                <strong>
+                                    {formatDateTime(deviceLastSeen)}
+                                </strong>
+                            </div>
                         </div>
                     </div>
 
                     <div className="system-stats">
                         <div>
-                            <span>Pumps</span>
-                            <strong>3</strong>
+                            <span>Water sensor</span>
+                            <strong>
+                                {values.waterPercentage === null
+                                    ? "UNAVAILABLE"
+                                    : "RECEIVING DATA"}
+                            </strong>
                         </div>
+
                         <div>
-                            <span>Sensors</span>
-                            <strong>{latest ? "3 / 3" : "--"}</strong>
+                            <span>pH sensor</span>
+                            <strong>
+                                {values.ph === null
+                                    ? "UNAVAILABLE"
+                                    : "VALID READING"}
+                            </strong>
                         </div>
+
                         <div>
                             <span>ESP32</span>
                             <strong>
-                                {deviceOnline
-                                    ? "ONLINE"
-                                    : deviceStatus.toUpperCase()}
+                                {deviceStatus.toUpperCase()}
                             </strong>
                         </div>
+
                         <div>
-                            <span>Refresh</span>
-                            <strong>5 sec</strong>
+                            <span>Refresh interval</span>
+                            <strong>5 seconds</strong>
                         </div>
                     </div>
                 </section>
 
+                {/* WATER HISTORY */}
                 <section className="charts-grid">
                     <article className="chart-card">
                         <div className="chart-header">
                             <div>
                                 <span className="section-label">
-                                    NUTRIENT CONTROL
+                                    WATER MONITORING
                                 </span>
-                                <h3>Nutrient Levels</h3>
+
+                                <h3>Water Level History</h3>
                             </div>
-                            <span className="chart-period">Live history</span>
+
+                            <span className="chart-period">
+                                Latest 50 records
+                            </span>
                         </div>
 
                         <div className="chart-wrap">
-                            {nutrientData.length ? (
-                                <ResponsiveContainer width="100%" height={310}>
+                            {chartData.length > 0 &&
+                            chartData.some(
+                                (item) => item.waterPercentage !== null
+                            ) ? (
+                                <ResponsiveContainer
+                                    width="100%"
+                                    height={300}
+                                >
                                     <AreaChart
-                                        data={nutrientData}
+                                        data={chartData}
                                         margin={{
                                             top: 10,
-                                            right: 8,
-                                            left: -18,
+                                            right: 10,
+                                            left: -15,
                                             bottom: 0,
                                         }}
                                     >
                                         <defs>
                                             <linearGradient
-                                                id="nutrientA"
+                                                id="waterFill"
                                                 x1="0"
                                                 y1="0"
                                                 x2="0"
@@ -425,28 +646,13 @@ function Dashboard() {
                                             >
                                                 <stop
                                                     offset="0%"
-                                                    stopOpacity={0.35}
+                                                    stopColor="#16c79a"
+                                                    stopOpacity={0.4}
                                                 />
                                                 <stop
                                                     offset="100%"
-                                                    stopOpacity={0}
-                                                />
-                                            </linearGradient>
-
-                                            <linearGradient
-                                                id="nutrientB"
-                                                x1="0"
-                                                y1="0"
-                                                x2="0"
-                                                y2="1"
-                                            >
-                                                <stop
-                                                    offset="0%"
-                                                    stopOpacity={0.25}
-                                                />
-                                                <stop
-                                                    offset="100%"
-                                                    stopOpacity={0}
+                                                    stopColor="#16c79a"
+                                                    stopOpacity={0.02}
                                                 />
                                             </linearGradient>
                                         </defs>
@@ -454,7 +660,7 @@ function Dashboard() {
                                         <CartesianGrid
                                             strokeDasharray="3 3"
                                             vertical={false}
-                                            opacity={0.12}
+                                            opacity={0.15}
                                         />
 
                                         <XAxis
@@ -465,109 +671,245 @@ function Dashboard() {
                                         />
 
                                         <YAxis
+                                            domain={[0, 100]}
+                                            unit="%"
                                             tick={{ fontSize: 11 }}
                                             axisLine={false}
                                             tickLine={false}
                                         />
 
                                         <Tooltip
-                                            contentStyle={{
-                                                borderRadius: 12,
-                                                border: "1px solid rgba(255,255,255,.12)",
-                                                background: "rgba(9,22,18,.96)",
-                                            }}
-                                        />
-
-                                        <Legend />
-
-                                        <Area
-                                            type="monotone"
-                                            dataKey="nutrientA"
-                                            name="Nutrient A"
-                                            strokeWidth={2.5}
-                                            fill="url(#nutrientA)"
-                                            connectNulls
+                                            formatter={(value) =>
+                                                value === null ||
+                                                value === undefined
+                                                    ? ["Unavailable", "Water level"]
+                                                    : [`${value.toFixed(1)}%`, "Water level"]
+                                            }
                                         />
 
                                         <Area
                                             type="monotone"
-                                            dataKey="nutrientB"
-                                            name="Nutrient B"
+                                            dataKey="waterPercentage"
+                                            name="Water level"
+                                            stroke="#16c79a"
                                             strokeWidth={2.5}
-                                            fill="url(#nutrientB)"
-                                            connectNulls
+                                            fill="url(#waterFill)"
+                                            connectNulls={false}
+                                            dot={false}
+                                            activeDot={{ r: 5 }}
                                         />
                                     </AreaChart>
                                 </ResponsiveContainer>
                             ) : (
-                                renderChartEmpty(
-                                    "No nutrient history available"
-                                )
+                                <ChartEmpty message="No valid water history available" />
+                            )}
+                        </div>
+                    </article>
+
+                    {/* PH HISTORY */}
+                    <article className="chart-card">
+                        <div className="chart-header">
+                            <div>
+                                <span className="section-label">
+                                    WATER QUALITY
+                                </span>
+
+                                <h3>pH History</h3>
+                            </div>
+
+                            <span className="chart-period">
+                                Valid readings only
+                            </span>
+                        </div>
+
+                        <div className="chart-wrap">
+                            {chartData.length > 0 &&
+                            chartData.some(
+                                (item) => item.ph !== null
+                            ) ? (
+                                <ResponsiveContainer
+                                    width="100%"
+                                    height={300}
+                                >
+                                    <AreaChart
+                                        data={chartData}
+                                        margin={{
+                                            top: 10,
+                                            right: 10,
+                                            left: -15,
+                                            bottom: 0,
+                                        }}
+                                    >
+                                        <defs>
+                                            <linearGradient
+                                                id="phFill"
+                                                x1="0"
+                                                y1="0"
+                                                x2="0"
+                                                y2="1"
+                                            >
+                                                <stop
+                                                    offset="0%"
+                                                    stopColor="#a78bfa"
+                                                    stopOpacity={0.35}
+                                                />
+                                                <stop
+                                                    offset="100%"
+                                                    stopColor="#a78bfa"
+                                                    stopOpacity={0.02}
+                                                />
+                                            </linearGradient>
+                                        </defs>
+
+                                        <CartesianGrid
+                                            strokeDasharray="3 3"
+                                            vertical={false}
+                                            opacity={0.15}
+                                        />
+
+                                        <XAxis
+                                            dataKey="time"
+                                            tick={{ fontSize: 11 }}
+                                            axisLine={false}
+                                            tickLine={false}
+                                        />
+
+                                        <YAxis
+                                            domain={[0, 14]}
+                                            tick={{ fontSize: 11 }}
+                                            axisLine={false}
+                                            tickLine={false}
+                                        />
+
+                                        <Tooltip
+                                            formatter={(value) =>
+                                                value === null ||
+                                                value === undefined
+                                                    ? ["Unavailable", "pH"]
+                                                    : [value.toFixed(2), "pH"]
+                                            }
+                                        />
+
+                                        <Area
+                                            type="monotone"
+                                            dataKey="ph"
+                                            name="pH"
+                                            stroke="#a78bfa"
+                                            strokeWidth={2.5}
+                                            fill="url(#phFill)"
+                                            connectNulls={false}
+                                            dot={false}
+                                            activeDot={{ r: 5 }}
+                                        />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            ) : (
+                                <ChartEmpty message="No valid pH readings available" />
                             )}
                         </div>
                     </article>
                 </section>
 
+                {/* REAL COMPONENT STATUS */}
                 <section className="bottom-grid">
-                    <article className="chart-card">
+                    <article className="quick-status-card">
                         <div className="chart-header">
                             <div>
                                 <span className="section-label">
-                                    AUTOMATION
+                                    SYSTEM HEALTH
                                 </span>
-                                <h3>Pump Runtime</h3>
+
+                                <h3>Component Status</h3>
                             </div>
-                            <span className="chart-period">
-                                Illustrative values
-                            </span>
                         </div>
 
-                        <div className="chart-wrap">
-                            <ResponsiveContainer width="100%" height={280}>
-                                <BarChart
-                                    data={pumpData}
-                                    margin={{
-                                        top: 10,
-                                        right: 8,
-                                        left: -18,
-                                        bottom: 0,
-                                    }}
-                                >
-                                    <CartesianGrid
-                                        strokeDasharray="3 3"
-                                        vertical={false}
-                                        opacity={0.12}
-                                    />
+                        <div className="component-list">
+                            <div className="component-item">
+                                <div className="component-icon">◌</div>
 
-                                    <XAxis
-                                        dataKey="name"
-                                        tick={{ fontSize: 10 }}
-                                        axisLine={false}
-                                        tickLine={false}
-                                    />
+                                <div>
+                                    <strong>Ultrasonic Sensor</strong>
+                                    <span>
+                                        {values.waterPercentage !== null
+                                            ? "Water measurement available"
+                                            : "No valid water measurement"}
+                                    </span>
+                                </div>
 
-                                    <YAxis
-                                        domain={[0, 100]}
-                                        tick={{ fontSize: 11 }}
-                                        axisLine={false}
-                                        tickLine={false}
-                                    />
+                                <b className={
+                                    values.waterPercentage !== null
+                                        ? "online"
+                                        : "offline-label"
+                                }>
+                                    {values.waterPercentage !== null
+                                        ? "DATA OK"
+                                        : "NO DATA"}
+                                </b>
+                            </div>
 
-                                    <Tooltip
-                                        contentStyle={{
-                                            borderRadius: 12,
-                                            border: "1px solid rgba(255,255,255,.12)",
-                                            background: "rgba(9,22,18,.96)",
-                                        }}
-                                    />
+                            <div className="component-item">
+                                <div className="component-icon">◇</div>
 
-                                    <Bar
-                                        dataKey="runtime"
-                                        name="Runtime %"
-                                        radius={[8, 8, 2, 2]}
-                                    />
-                                </BarChart>
-                            </ResponsiveContainer>
+                                <div>
+                                    <strong>pH Sensor</strong>
+                                    <span>
+                                        {values.ph !== null
+                                            ? "Valid pH measurement"
+                                            : "Missing or invalid pH reading"}
+                                    </span>
+                                </div>
+
+                                <b className={
+                                    values.ph !== null
+                                        ? "online"
+                                        : "offline-label"
+                                }>
+                                    {values.ph !== null
+                                        ? "VALID"
+                                        : "UNAVAILABLE"}
+                                </b>
+                            </div>
+
+                            <div className="component-item">
+                                <div className="component-icon">⌁</div>
+
+                                <div>
+                                    <strong>ESP32 Controller</strong>
+                                    <span>
+                                        Last heartbeat:{" "}
+                                        {formatDateTime(deviceLastSeen)}
+                                    </span>
+                                </div>
+
+                                <b className={
+                                    deviceOnline
+                                        ? "online"
+                                        : "offline-label"
+                                }>
+                                    {statusLabels[deviceStatus] || "Unknown"}
+                                </b>
+                            </div>
+
+                            <div className="component-item">
+                                <div className="component-icon">↻</div>
+
+                                <div>
+                                    <strong>Supabase Data</strong>
+                                    <span>
+                                        {latest
+                                            ? "Latest database reading retrieved"
+                                            : "No stored sensor reading"}
+                                    </span>
+                                </div>
+
+                                <b className={
+                                    !apiOffline
+                                        ? "online"
+                                        : "offline-label"
+                                }>
+                                    {apiOffline ? "ERROR" : "CONNECTED"}
+                                </b>
+                            </div>
                         </div>
                     </article>
 
@@ -575,69 +917,57 @@ function Dashboard() {
                         <div className="chart-header">
                             <div>
                                 <span className="section-label">
-                                    CONTROL CENTER
+                                    DATA SUMMARY
                                 </span>
-                                <h3>System Components</h3>
+
+                                <h3>Latest Measurements</h3>
                             </div>
                         </div>
 
-                        <div className="component-list">
-                            <div className="component-item">
-                                <div className="component-icon">◌</div>
-                                <div>
-                                    <strong>Water Pump</strong>
-                                    <span>Circulation system</span>
-                                </div>
-                                <b className={
-                                    deviceOnline ? "online" : "offline-label"
-                                }>
-                                    {deviceOnline ? "DEVICE ONLINE" : "CHECK"}
-                                </b>
+                        <div className="reservoir-details summary-details">
+                            <div>
+                                <span>Water level</span>
+                                <strong>
+                                    {values.waterPercentage === null
+                                        ? "Unavailable"
+                                        : `${values.waterPercentage.toFixed(1)}%`}
+                                </strong>
                             </div>
 
-                            <div className="component-item">
-                                <div className="component-icon">✦</div>
-                                <div>
-                                    <strong>Nutrient Pumps</strong>
-                                    <span>Automatic dosing</span>
-                                </div>
-                                <b className="online">AUTO</b>
+                            <div>
+                                <span>pH</span>
+                                <strong>
+                                    {values.ph === null
+                                        ? "Unavailable"
+                                        : values.ph.toFixed(2)}
+                                </strong>
                             </div>
 
-                            <div className="component-item">
-                                <div className="component-icon">◇</div>
-                                <div>
-                                    <strong>ESP32 Controller</strong>
-                                    <span>
-                                        {deviceStatus === "unknown"
-                                            ? "Device status unavailable"
-                                            : deviceOnline
-                                                ? "Last heartbeat received"
-                                                : "No recent heartbeat"}
-                                    </span>
-                                </div>
-                                <b className={
-                                    deviceOnline ? "online" : "offline-label"
-                                }>
-                                    {deviceStatus.toUpperCase()}
-                                </b>
+                            <div>
+                                <span>Database timestamp</span>
+                                <strong>
+                                    {formatDateTime(latest?.timestamp)}
+                                </strong>
+                            </div>
+
+                            <div>
+                                <span>Dashboard sync</span>
+                                <strong>
+                                    {lastUpdated
+                                        ? lastUpdated.toLocaleTimeString()
+                                        : "Waiting for sync"}
+                                </strong>
                             </div>
                         </div>
-
-                        <p className="device-last-seen">
-                            Last ESP32 heartbeat:{" "}
-                            {deviceLastSeen
-                                ? new Date(deviceLastSeen).toLocaleString()
-                                : "Not available"}
-                        </p>
                     </article>
                 </section>
 
                 <footer className="dashboard-footer">
                     <span>HydroControl ESP32 System</span>
+
                     <span>
                         {lastUpdated
-                            ? `Last API sync ${lastUpdated.toLocaleTimeString()}`
+                            ? `Last sync ${lastUpdated.toLocaleTimeString()}`
                             : "Waiting for first sync"}
                     </span>
                 </footer>
