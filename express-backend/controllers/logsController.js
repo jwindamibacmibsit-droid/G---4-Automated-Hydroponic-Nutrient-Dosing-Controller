@@ -1,8 +1,6 @@
 
 const supabase = require("../config/supabase");
 
-const MAX_LIMIT = 500;
-
 const getSystemLogs = async (req, res) => {
     try {
         const {
@@ -14,8 +12,8 @@ const getSystemLogs = async (req, res) => {
 
         const parsedLimit = Number.parseInt(limit, 10);
         const safeLimit = Number.isFinite(parsedLimit)
-            ? Math.min(Math.max(parsedLimit, 1), MAX_LIMIT)
-            : MAX_LIMIT;
+            ? Math.min(Math.max(parsedLimit, 1), 500)
+            : 500;
 
         let query = supabase
             .from("system_logs")
@@ -23,11 +21,11 @@ const getSystemLogs = async (req, res) => {
                 id,
                 user_id,
                 device_id,
-                timestamp,
                 level,
                 category,
                 event,
-                details
+                details,
+                timestamp
             `)
             .order("timestamp", { ascending: false })
             .limit(safeLimit);
@@ -40,23 +38,21 @@ const getSystemLogs = async (req, res) => {
             query = query.eq("category", category.toUpperCase());
         }
 
-        const normalizedSearch = String(search).trim();
+        const term = String(search).trim();
 
-        if (normalizedSearch) {
-            const escapedSearch = normalizedSearch.replace(
-                /[%_(),]/g,
-                (character) => `\\${character}`
-            );
+        if (term) {
+            // Escape PostgREST filter syntax characters.
+            const escaped = term.replace(/[\\%_(),]/g, "\\$&");
 
             query = query.or(
-                `event.ilike.%${escapedSearch}%,details.ilike.%${escapedSearch}%,category.ilike.%${escapedSearch}%,level.ilike.%${escapedSearch}%`
+                `event.ilike.%${escaped}%,details.ilike.%${escaped}%,category.ilike.%${escaped}%,level.ilike.%${escaped}%`
             );
         }
 
-        const { data: rows, error } = await query;
+        const { data: logs, error } = await query;
 
         if (error) {
-            console.error("SUPABASE SYSTEM LOGS ERROR:", error);
+            console.error("SYSTEM LOGS QUERY ERROR:", error);
 
             return res.status(500).json({
                 success: false,
@@ -64,35 +60,35 @@ const getSystemLogs = async (req, res) => {
             });
         }
 
-        const logs = rows || [];
+        const records = logs || [];
 
         const deviceIds = [
             ...new Set(
-                logs
+                records
                     .map((log) => log.device_id)
-                    .filter((id) => id !== null && id !== undefined)
+                    .filter((id) => id != null)
             )
         ];
 
         const userIds = [
             ...new Set(
-                logs
+                records
                     .map((log) => log.user_id)
-                    .filter((id) => id !== null && id !== undefined)
+                    .filter((id) => id != null)
             )
         ];
 
         let devices = [];
-        let users = [];
+        let admins = [];
 
-        if (deviceIds.length > 0) {
-            const result = await supabase
+        if (deviceIds.length) {
+            const { data, error: deviceError } = await supabase
                 .from("devices")
-                .select("id, device_name, device_uid")
+                .select("id, device_name, device_uid, status, firmware_version")
                 .in("id", deviceIds);
 
-            if (result.error) {
-                console.error("DEVICE LOOKUP ERROR:", result.error);
+            if (deviceError) {
+                console.error("DEVICE LOOKUP ERROR:", deviceError);
 
                 return res.status(500).json({
                     success: false,
@@ -100,17 +96,17 @@ const getSystemLogs = async (req, res) => {
                 });
             }
 
-            devices = result.data || [];
+            devices = data || [];
         }
 
-        if (userIds.length > 0) {
-            const result = await supabase
-                .from("users")
-                .select("id, email")
+        if (userIds.length) {
+            const { data, error: adminError } = await supabase
+                .from("admin")
+                .select("id, name, email, role")
                 .in("id", userIds);
 
-            if (result.error) {
-                console.error("USER LOOKUP ERROR:", result.error);
+            if (adminError) {
+                console.error("ADMIN LOOKUP ERROR:", adminError);
 
                 return res.status(500).json({
                     success: false,
@@ -118,30 +114,24 @@ const getSystemLogs = async (req, res) => {
                 });
             }
 
-            users = result.data || [];
+            admins = data || [];
         }
 
         const deviceMap = new Map(
-            devices.map((device) => [
-                String(device.id),
-                device
-            ])
+            devices.map((device) => [String(device.id), device])
         );
 
-        const userMap = new Map(
-            users.map((user) => [
-                String(user.id),
-                user
-            ])
+        const adminMap = new Map(
+            admins.map((admin) => [String(admin.id), admin])
         );
 
-        const formattedLogs = logs.map((log) => {
+        const formattedLogs = records.map((log) => {
             const device = log.device_id != null
                 ? deviceMap.get(String(log.device_id))
                 : null;
 
-            const user = log.user_id != null
-                ? userMap.get(String(log.user_id))
+            const admin = log.user_id != null
+                ? adminMap.get(String(log.user_id))
                 : null;
 
             return {
@@ -152,44 +142,43 @@ const getSystemLogs = async (req, res) => {
                         ? `Device #${log.device_id}`
                         : "System"),
                 device_uid: device?.device_uid || null,
-                user_email: user?.email || null
+                device_status: device?.status || null,
+                firmware_version: device?.firmware_version || null,
+                user_name: admin?.name || null,
+                user_email: admin?.email || null,
+                user_role: admin?.role || null
             };
         });
 
-        // Fetch the distinct values for dynamic filter options.
-        const { data: filterRows, error: filterError } =
-            await supabase
-                .from("system_logs")
-                .select("level, category")
-                .limit(MAX_LIMIT);
+        // Use actual database values for the category and level filters.
+        // Fetch distinct options across the latest 500 records.
+        const { data: filterRows, error: filterError } = await supabase
+            .from("system_logs")
+            .select("level, category")
+            .order("timestamp", { ascending: false })
+            .limit(500);
 
         if (filterError) {
-            console.error("LOG FILTER LOOKUP ERROR:", filterError);
+            console.error("FILTER OPTIONS QUERY ERROR:", filterError);
         }
 
-        const levels = [
-            ...new Set(
-                (filterRows || [])
-                    .map((row) => row.level)
-                    .filter(Boolean)
-            )
-        ].sort();
-
-        const categories = [
-            ...new Set(
-                (filterRows || [])
-                    .map((row) => row.category)
-                    .filter(Boolean)
-            )
-        ].sort();
+        const filters = filterRows || [];
 
         return res.status(200).json({
             success: true,
             count: formattedLogs.length,
             data: formattedLogs,
             filters: {
-                levels,
-                categories
+                levels: [
+                    ...new Set(
+                        filters.map((row) => row.level).filter(Boolean)
+                    )
+                ].sort(),
+                categories: [
+                    ...new Set(
+                        filters.map((row) => row.category).filter(Boolean)
+                    )
+                ].sort()
             }
         });
     } catch (error) {
