@@ -261,7 +261,7 @@ function Login({ onLogin }) {
                         HEADER
                     ================================== */}
 
-                    <div className="login-card-header">
+                    <div class="login-card-header">
 
                         <div className="mobile-login-logo">
                             🌱

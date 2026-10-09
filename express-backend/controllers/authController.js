@@ -37,7 +37,7 @@ const login = async (req, res) => {
             data: user,
             error
         } = await supabase
-            .from("users")
+            .from("admin")
             .select(`
                 id,
                 name,
@@ -140,7 +140,7 @@ const login = async (req, res) => {
         const {
             error: updateError
         } = await supabase
-            .from("users")
+            .from("admin")
             .update({
                 last_login: currentLogin,
                 updated_at: currentLogin
