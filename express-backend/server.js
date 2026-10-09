@@ -33,7 +33,8 @@ const corsOptions = {
     ],
     allowedHeaders: [
         "Content-Type",
-        "Authorization"
+        "Authorization",
+        "x-device-token"
     ],
     credentials: true,
     optionsSuccessStatus: 204

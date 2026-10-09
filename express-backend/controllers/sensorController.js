@@ -1,180 +1,144 @@
+
 const supabase = require("../config/supabase");
 
-// ==========================================
-// GET LATEST SENSOR READING
-// ==========================================
+const DEVICE_UID = process.env.DEVICE_UID || "ESP32-HYDRO-001";
+const OFFLINE_TIMEOUT_MS = 60 * 1000;
+const HISTORY_LIMIT = 20;
 
-const getLatestReading = async (req, res) => {
+function sendError(res, message, error) {
+    console.error(message, error);
+    return res.status(500).json({
+        success: false,
+        message,
+        error: error?.message || String(error),
+    });
+}
+
+async function findDevice() {
+    const { data, error } = await supabase
+        .from("devices")
+        .select("*")
+        .eq("device_uid", DEVICE_UID)
+        .maybeSingle();
+
+    if (error) throw error;
+    return data;
+}
+
+// GET /api/sensors/latest
+async function getLatestReading(req, res) {
     try {
-        const { data: reading, error } = await supabase
-            .from("sensor_reading")
-            .select(`
-                id,
-                device_id,
-                ph_value,
-                water_level,
+        const device = await findDevice();
 
-                nutrient_a,
-                nutrient_b,
-                timestamp
-            `)
+        if (!device) {
+            return res.status(404).json({
+                success: false,
+                message: "HydroControl device is not registered.",
+            });
+        }
+
+        const { data, error } = await supabase
+            .from("sensor_reading")
+            .select("*")
+            .eq("device_id", device.id)
             .order("timestamp", { ascending: false })
             .limit(1)
             .maybeSingle();
 
-        if (error) {
-            console.error("SUPABASE SENSOR ERROR:", error);
+        if (error) throw error;
 
-            return res.status(500).json({
-                success: false,
-                message: "Failed to retrieve sensor reading.",
-                error: error.message
-            });
-        }
+        return res.json({
+            success: true,
+            device: {
+                id: device.id,
+                device_uid: device.device_uid,
+                device_name: device.device_name,
+                status: device.status,
+                last_seen: device.last_seen,
+            },
+            data: data || null,
+        });
+    } catch (error) {
+        return sendError(res, "Failed to retrieve latest sensor reading", error);
+    }
+}
 
-        // No data
-        if (!reading) {
+// GET /api/sensors/history
+async function getSensorHistory(req, res) {
+    try {
+        const device = await findDevice();
+
+        if (!device) {
             return res.status(404).json({
                 success: false,
-                message: "No sensor readings found."
+                message: "HydroControl device is not registered.",
             });
         }
 
+        const requestedLimit = Number.parseInt(req.query.limit, 10);
+        const limit = Number.isInteger(requestedLimit)
+            ? Math.max(1, Math.min(requestedLimit, 100))
+            : HISTORY_LIMIT;
 
-        // Send data to React
-        return res.status(200).json({
-            success: true,
-            data: {
-                id: reading.id,
-
-                device_id: reading.device_id,
-
-                ph_value:
-                    reading.ph_value !== null
-                        ? Number(reading.ph_value)
-                        : null,
-
-                water_level:
-                    reading.water_level !== null
-                        ? Number(reading.water_level)
-                        : null,
-
-                nutrient_a:
-                    reading.nutrient_a !== null
-                        ? Number(reading.nutrient_a)
-                        : null,
-
-                nutrient_b:
-                    reading.nutrient_b !== null
-                        ? Number(reading.nutrient_b)
-                        : null,
-
-                timestamp: reading.timestamp
-            }
-        });
-
-    } catch (error) {
-        console.error("SENSOR DATABASE ERROR:", error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Failed to retrieve sensor reading.",
-            error: error.message
-        });
-    }
-};
-
-
-// ==========================================
-// GET SENSOR HISTORY
-// ==========================================
-
-const getSensorHistory = async (req, res) => {
-    try {
-        const { data: readings, error } = await supabase
+        const { data, error } = await supabase
             .from("sensor_reading")
-            .select(`
-                id,
-                device_id,
-                ph_value,
-                water_level,
-                
-                nutrient_a,
-                nutrient_b,
-                timestamp
-            `)
+            .select("*")
+            .eq("device_id", device.id)
             .order("timestamp", { ascending: false })
-            .limit(20);
+            .limit(limit);
 
-        if (error) {
-            console.error(
-                "SUPABASE SENSOR HISTORY ERROR:",
-                error
-            );
+        if (error) throw error;
 
-            return res.status(500).json({
+        return res.json({
+            success: true,
+            count: data.length,
+            data: data.reverse(),
+        });
+    } catch (error) {
+        return sendError(res, "Failed to retrieve sensor history", error);
+    }
+}
+
+// GET /api/sensors/device-status
+async function getDeviceStatus(req, res) {
+    try {
+        const device = await findDevice();
+
+        if (!device) {
+            return res.status(404).json({
                 success: false,
-                message: "Failed to retrieve sensor history.",
-                error: error.message
+                message: "HydroControl device is not registered.",
+                online: false,
             });
         }
 
-        const history = (readings || [])
-            .reverse()
-            .map((reading) => ({
-                id: reading.id,
+        const lastSeenMs = device.last_seen
+            ? new Date(device.last_seen).getTime()
+            : 0;
 
-                device_id: reading.device_id,
+        const online =
+            Number.isFinite(lastSeenMs) &&
+            lastSeenMs > 0 &&
+            Date.now() - lastSeenMs <= OFFLINE_TIMEOUT_MS;
 
-                ph_value:
-                    reading.ph_value !== null
-                        ? Number(reading.ph_value)
-                        : null,
-
-                water_level:
-                    reading.water_level !== null
-                        ? Number(reading.water_level)
-                        : null,
-
-                        
-                nutrient_a:
-                    reading.nutrient_a !== null
-                        ? Number(reading.nutrient_a)
-                        : null,
-
-                nutrient_b:
-                    reading.nutrient_b !== null
-                        ? Number(reading.nutrient_b)
-                        : null,
-
-                timestamp: reading.timestamp
-            }));
-
-        return res.status(200).json({
+        return res.json({
             success: true,
-            data: history
+            online,
+            device: {
+                id: device.id,
+                device_uid: device.device_uid,
+                device_name: device.device_name,
+                status: online ? "online" : "offline",
+                last_seen: device.last_seen,
+            },
         });
-
     } catch (error) {
-        console.error(
-            "SENSOR HISTORY DATABASE ERROR:",
-            error
-        );
-
-        return res.status(500).json({
-            success: false,
-            message: "Failed to retrieve sensor history.",
-            error: error.message
-        });
+        return sendError(res, "Failed to retrieve device status", error);
     }
-};
-
-
-// ==========================================
-// EXPORT
-// ==========================================
+}
 
 module.exports = {
     getLatestReading,
-    getSensorHistory
+    getSensorHistory,
+    getDeviceStatus,
 };

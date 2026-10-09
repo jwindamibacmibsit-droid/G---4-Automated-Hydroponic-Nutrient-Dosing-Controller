@@ -1,33 +1,41 @@
+
 const express = require("express");
+
 
 const router = express.Router();
 
-const {
-    receiveSensorData,
-    receivePumpEvent
-} = require("../controllers/espController");
+const espController = require("../controllers/espController");
 
-
-// ==========================================
-// ESP32 SENSOR DATA
-// POST /api/iot/sensors
-// ==========================================
-
+// ESP32 endpoints
 router.post(
     "/sensors",
-    receiveSensorData
+    espController.validDevice,
+    espController.receiveSensorData
 );
 
-
-// ==========================================
-// ESP32 PUMP EVENTS
-// POST /api/iot/pump-event
-// ==========================================
+router.get(
+    "/commands/next",
+    espController.validDevice,
+    espController.getNextPumpCommand
+);
 
 router.post(
-    "/pump-event",
-    receivePumpEvent
+    "/commands/:id/result",
+    espController.validDevice,
+    espController.reportPumpResult
 );
 
+// Website endpoints
+router.get(
+    "/dashboard/latest",
+    espController.requireUser,
+    espController.getLatestSensorData
+);
+
+router.post(
+    "/pumps/commands",
+    espController.requireUser,
+    espController.createPumpCommand
+);
 
 module.exports = router;
