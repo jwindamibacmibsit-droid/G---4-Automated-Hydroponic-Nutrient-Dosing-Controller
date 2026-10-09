@@ -1,41 +1,17 @@
 
 const express = require("express");
-
-
 const router = express.Router();
 
-const espController = require("../controllers/espController");
+const {
+    receiveSensorData,
+    getNextPumpCommand,
+    receivePumpResult,
+} = require("../controllers/espController");
 
-// ESP32 endpoints
-router.post(
-    "/sensors",
-    espController.validDevice,
-    espController.receiveSensorData
-);
+router.post("/sensors", receiveSensorData);
 
-router.get(
-    "/commands/next",
-    espController.validDevice,
-    espController.getNextPumpCommand
-);
+router.get("/commands/next", getNextPumpCommand);
 
-router.post(
-    "/commands/:id/result",
-    espController.validDevice,
-    espController.reportPumpResult
-);
-
-// Website endpoints
-router.get(
-    "/dashboard/latest",
-    espController.requireUser,
-    espController.getLatestSensorData
-);
-
-router.post(
-    "/pumps/commands",
-    espController.requireUser,
-    espController.createPumpCommand
-);
+router.post("/commands/:id/result", receivePumpResult);
 
 module.exports = router;
