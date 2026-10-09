@@ -1,1258 +1,769 @@
+
 import {
+    useCallback,
     useEffect,
     useMemo,
     useState
 } from "react";
 
 import Sidebar from "../components/Navbar";
-
 import "../css/system-logs.css";
 
+const API_URL = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+const LOGS_URL = `${API_URL}/api/system/logs`;
 
-const API_URL =
-    import.meta.env.VITE_API_URL;
+const LEVELS = ["INFO", "SUCCESS", "WARNING", "ERROR"];
 
+const normalizeLevel = (value) =>
+    String(value || "INFO").toUpperCase();
+
+const formatDateTime = (value) => {
+    if (!value) return "--";
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) return "--";
+
+    return date.toLocaleString([], {
+        year: "numeric",
+        month: "short",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit"
+    });
+};
+
+const formatTime = (value) => {
+    if (!value) return "--";
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) return "--";
+
+    return date.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit"
+    });
+};
 
 function SystemLogs() {
+    const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [logs, setLogs] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [error, setError] = useState("");
+    const [apiOnline, setApiOnline] = useState(null);
+    const [lastUpdated, setLastUpdated] = useState(null);
+    const [lastLogin, setLastLogin] = useState(null);
+    const [availableLevels, setAvailableLevels] = useState([]);
+    const [availableCategories, setAvailableCategories] = useState([]);
+    const [searchTerm, setSearchTerm] = useState("");
+    const [severityFilter, setSeverityFilter] = useState("All");
+    const [categoryFilter, setCategoryFilter] = useState("All");
 
-    // =====================================================
-    // STATE
-    // =====================================================
-
-    const [
-        sidebarOpen,
-        setSidebarOpen
-    ] = useState(false);
-
-
-    const [
-        logs,
-        setLogs
-    ] = useState([]);
-
-
-    const [
-        loading,
-        setLoading
-    ] = useState(true);
-
-
-    const [
-        error,
-        setError
-    ] = useState("");
-
-
-    const [
-        lastUpdated,
-        setLastUpdated
-    ] = useState(null);
-
-
-    const [
-        lastLogin,
-        setLastLogin
-    ] = useState(null);
-
-
-    const [
-        searchTerm,
-        setSearchTerm
-    ] = useState("");
-
-
-    const [
-        severityFilter,
-        setSeverityFilter
-    ] = useState("All");
-
-
-    const [
-        categoryFilter,
-        setCategoryFilter
-    ] = useState("All");
-
-
-    // =====================================================
-    // LOAD SYSTEM LOGS
-    // =====================================================
-
-    const fetchLogs = async () => {
-
+    const loadCurrentUser = useCallback(() => {
         try {
+            const storedUser =
+                localStorage.getItem("hydrocontrol_user") ||
+                sessionStorage.getItem("hydrocontrol_user");
 
-            setLoading(true);
-
-            setError("");
-
-
-            console.log(
-                "FETCHING SYSTEM LOGS:",
-                `${API_URL}/api/system/logs`
-            );
-
-
-            const response =
-                await fetch(
-                    `${API_URL}/api/system/logs`,
-                    {
-                        method: "GET",
-
-                        headers: {
-                            "Accept":
-                                "application/json"
-                        },
-
-                        cache: "no-store"
-                    }
-                );
-
-
-            console.log(
-                "SYSTEM LOG HTTP STATUS:",
-                response.status
-            );
-
-
-            const responseText =
-                await response.text();
-
-
-            if (!responseText.trim()) {
-
-                throw new Error(
-                    `Empty server response. HTTP ${response.status}`
-                );
+            if (!storedUser) {
+                setLastLogin(null);
+                return;
             }
 
+            const user = JSON.parse(storedUser);
+            setLastLogin(user.last_login || null);
+        } catch (error) {
+            console.error("Could not read current user:", error);
+            setLastLogin(null);
+        }
+    }, []);
+
+    const fetchLogs = useCallback(async ({ silent = false } = {}) => {
+        if (silent) {
+            setRefreshing(true);
+        } else {
+            setLoading(true);
+        }
+
+        try {
+            const response = await fetch(
+                `${LOGS_URL}?limit=500`,
+                {
+                    method: "GET",
+                    headers: {
+                        Accept: "application/json"
+                    },
+                    cache: "no-store"
+                }
+            );
+
+            const text = await response.text();
+
+            if (!text.trim()) {
+                throw new Error(
+                    `The server returned an empty response (${response.status}).`
+                );
+            }
 
             let result;
 
             try {
+                result = JSON.parse(text);
+            } catch {
+                throw new Error("The server returned invalid JSON.");
+            }
 
-                result =
-                    JSON.parse(responseText);
-
-            } catch (jsonError) {
-
-                console.error(
-                    "INVALID SYSTEM LOG JSON:",
-                    responseText
-                );
-
+            if (!response.ok || !result.success) {
                 throw new Error(
-                    "Server returned invalid JSON."
+                    result.message || `Request failed (${response.status}).`
                 );
             }
 
+            const receivedLogs = Array.isArray(result.data)
+                ? result.data
+                : [];
 
-            if (
-                !response.ok ||
-                !result.success
-            ) {
+            setLogs(receivedLogs);
 
-                throw new Error(
-                    result.message ||
-                    "Failed to load system logs."
-                );
-            }
-
-
-            console.log(
-                "SYSTEM LOGS:",
-                result.data
+            setAvailableLevels(
+                Array.isArray(result.filters?.levels)
+                    ? result.filters.levels
+                    : []
             );
 
-
-            setLogs(
-                result.data || []
+            setAvailableCategories(
+                Array.isArray(result.filters?.categories)
+                    ? result.filters.categories
+                    : []
             );
 
+            setApiOnline(true);
+            setLastUpdated(new Date());
+            setError("");
+        } catch (err) {
+            console.error("Failed to fetch system logs:", err);
 
-            setLastUpdated(
-                new Date()
-            );
-
-
-        } catch (error) {
-
-            console.error(
-                "Failed to load system logs:",
-                error
-            );
-
-
+            setApiOnline(false);
             setError(
-                "Unable to load system logs from the server."
+                err.message || "Unable to connect to the system logs API."
             );
 
-
-            setLogs([]);
-
-
+            // Keep previously loaded records visible on refresh failure.
         } finally {
-
             setLoading(false);
-
+            setRefreshing(false);
         }
-    };
-
-
-    // =====================================================
-    // LOAD CURRENT USER
-    // =====================================================
-
-    const loadCurrentUser = () => {
-
-        const storedUser =
-            localStorage.getItem(
-                "hydrocontrol_user"
-            ) ||
-            sessionStorage.getItem(
-                "hydrocontrol_user"
-            );
-
-
-        if (!storedUser) {
-
-            setLastLogin(null);
-
-            return;
-        }
-
-
-        try {
-
-            const user =
-                JSON.parse(storedUser);
-
-
-            setLastLogin(
-                user.last_login || null
-            );
-
-
-            console.log(
-                "CURRENT USER:",
-                user
-            );
-
-
-        } catch (error) {
-
-            console.error(
-                "Failed to read logged-in user:",
-                error
-            );
-
-
-            setLastLogin(null);
-        }
-    };
-
-
-    // =====================================================
-    // INITIAL LOAD
-    // =====================================================
-
-    useEffect(() => {
-
-        loadCurrentUser();
-
-        fetchLogs();
-
     }, []);
 
-
-    // =====================================================
-    // FORMAT TIME
-    // =====================================================
-
-    const formatTime = (
-        timestamp
-    ) => {
-
-        if (!timestamp) {
-            return "--";
-        }
-
-
-        return new Date(
-            timestamp
-        ).toLocaleTimeString(
-            [],
-            {
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit"
-            }
-        );
-    };
-
-
-    // =====================================================
-    // FORMAT DATE
-    // =====================================================
-
-    const formatDate = (
-        timestamp
-    ) => {
-
-        if (!timestamp) {
-            return "--";
-        }
-
-
-        return new Date(
-            timestamp
-        ).toLocaleDateString(
-            [],
-            {
-                year: "numeric",
-                month: "short",
-                day: "2-digit"
-            }
-        );
-    };
-
-
-    // =====================================================
-    // FORMAT DATE/TIME
-    // =====================================================
-
-    const formatDateTime = (
-        timestamp
-    ) => {
-
-        if (!timestamp) {
-            return "--";
-        }
-
-
-        return new Date(
-            timestamp
-        ).toLocaleString(
-            [],
-            {
-                year: "numeric",
-                month: "short",
-                day: "2-digit",
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit"
-            }
-        );
-    };
-
-
-    // =====================================================
-    // FILTER LOGS
-    // =====================================================
-
-    const filteredLogs =
-        useMemo(() => {
-
-            const search =
-                searchTerm
-                    .toLowerCase()
-                    .trim();
-
-
-            return logs.filter(
-                (log) => {
-
-                    const matchesSearch =
-
-                        String(
-                            log.event || ""
-                        )
-                            .toLowerCase()
-                            .includes(search)
-
-                        ||
-
-                        String(
-                            log.details || ""
-                        )
-                            .toLowerCase()
-                            .includes(search)
-
-                        ||
-
-                        String(
-                            log.category || ""
-                        )
-                            .toLowerCase()
-                            .includes(search)
-
-                        ||
-
-                        String(
-                            log.device || ""
-                        )
-                            .toLowerCase()
-                            .includes(search);
-
-
-                    const matchesSeverity =
-                        severityFilter === "All" ||
-                        log.level ===
-                            severityFilter;
-
-
-                    const matchesCategory =
-                        categoryFilter === "All" ||
-                        log.category ===
-                            categoryFilter;
-
-
-                    return (
-                        matchesSearch &&
-                        matchesSeverity &&
-                        matchesCategory
-                    );
-                }
-            );
-
-        }, [
-            logs,
-            searchTerm,
-            severityFilter,
-            categoryFilter
-        ]);
-
-
-    // =====================================================
-    // STATISTICS
-    // =====================================================
-
-    const totalLogs =
-        logs.length;
-
-
-    const successLogs =
-        logs.filter(
-            (log) =>
-                log.level ===
-                "SUCCESS"
-        ).length;
-
-
-    const warningLogs =
-        logs.filter(
-            (log) =>
-                log.level ===
-                "WARNING"
-        ).length;
-
-
-    const errorLogs =
-        logs.filter(
-            (log) =>
-                log.level ===
-                "ERROR"
-        ).length;
-
-
-    const successPercentage =
-        totalLogs > 0
-            ? (
-                (successLogs /
-                    totalLogs) *
-                100
-            ).toFixed(1)
-            : "0.0";
-
-
-    const warningPercentage =
-        totalLogs > 0
-            ? (
-                (warningLogs /
-                    totalLogs) *
-                100
-            ).toFixed(1)
-            : "0.0";
-
-
-    const errorPercentage =
-        totalLogs > 0
-            ? (
-                (errorLogs /
-                    totalLogs) *
-                100
-            ).toFixed(1)
-            : "0.0";
-
-
-    // =====================================================
-    // LEVEL ICON
-    // =====================================================
-
-    const getLevelIcon = (
-        level
-    ) => {
-
-        switch (level) {
-
-            case "SUCCESS":
-                return "✓";
-
-            case "WARNING":
-                return "!";
-
-            case "ERROR":
-                return "×";
-
-            default:
-                return "i";
-        }
-    };
-
-
-    // =====================================================
-    // REFRESH
-    // =====================================================
-
-    const handleRefresh = async () => {
-
+    useEffect(() => {
         loadCurrentUser();
+        fetchLogs();
 
-        await fetchLogs();
+        const intervalId = window.setInterval(() => {
+            fetchLogs({ silent: true });
+        }, 30000);
+
+        return () => window.clearInterval(intervalId);
+    }, [fetchLogs, loadCurrentUser]);
+
+    const filteredLogs = useMemo(() => {
+        const search = searchTerm.trim().toLowerCase();
+
+        return logs.filter((log) => {
+            const searchableFields = [
+                log.event,
+                log.details,
+                log.category,
+                log.level,
+                log.device,
+                log.device_uid,
+                log.user_email,
+                log.device_id
+            ];
+
+            const matchesSearch =
+                !search ||
+                searchableFields.some((field) =>
+                    String(field ?? "").toLowerCase().includes(search)
+                );
+
+            const matchesLevel =
+                severityFilter === "All" ||
+                normalizeLevel(log.level) === severityFilter;
+
+            const matchesCategory =
+                categoryFilter === "All" ||
+                String(log.category || "SYSTEM").toUpperCase() ===
+                    categoryFilter.toUpperCase();
+
+            return matchesSearch && matchesLevel && matchesCategory;
+        });
+    }, [logs, searchTerm, severityFilter, categoryFilter]);
+
+    const statistics = useMemo(() => {
+        const result = {
+            total: logs.length,
+            SUCCESS: 0,
+            WARNING: 0,
+            ERROR: 0,
+            INFO: 0
+        };
+
+        logs.forEach((log) => {
+            const level = normalizeLevel(log.level);
+
+            if (Object.prototype.hasOwnProperty.call(result, level)) {
+                result[level] += 1;
+            } else {
+                result.INFO += 1;
+            }
+        });
+
+        return result;
+    }, [logs]);
+
+    const latestEvent = logs.length
+        ? logs.reduce((latest, current) => {
+            if (!latest) return current;
+
+            return new Date(current.timestamp || 0) >
+                new Date(latest.timestamp || 0)
+                ? current
+                : latest;
+        }, null)
+        : null;
+
+    const handleRefresh = () => {
+        loadCurrentUser();
+        fetchLogs();
     };
 
+    const exportCSV = () => {
+        if (!filteredLogs.length) return;
 
-    // =====================================================
-    // RENDER
-    // =====================================================
+        const columns = [
+            ["Timestamp", "timestamp"],
+            ["Level", "level"],
+            ["Category", "category"],
+            ["Event", "event"],
+            ["Device", "device"],
+            ["Device UID", "device_uid"],
+            ["User Email", "user_email"],
+            ["Details", "details"]
+        ];
+
+        const escapeCSV = (value) => {
+            const text = String(value ?? "");
+            return `"${text.replace(/"/g, '""')}"`;
+        };
+
+        const csv = [
+            columns.map(([label]) => escapeCSV(label)).join(","),
+            ...filteredLogs.map((log) =>
+                columns
+                    .map(([, key]) => escapeCSV(log[key]))
+                    .join(",")
+            )
+        ].join("\r\n");
+
+        const blob = new Blob(["\uFEFF", csv], {
+            type: "text/csv;charset=utf-8;"
+        });
+
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+
+        anchor.href = url;
+        anchor.download = `hydrocontrol-system-logs-${new Date()
+            .toISOString()
+            .slice(0, 10)}.csv`;
+
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+    };
+
+    const clearFilters = () => {
+        setSearchTerm("");
+        setSeverityFilter("All");
+        setCategoryFilter("All");
+    };
 
     return (
-
         <div className="logs-page">
-
             <Sidebar
                 isOpen={sidebarOpen}
                 setIsOpen={setSidebarOpen}
             />
 
-
             <main className="logs-main">
-
-                {/* =========================================
-                    HEADER
-                ========================================= */}
-
                 <header className="logs-header">
-
-                    <div className="logs-header-left">
-
+                    <div className="logs-heading">
                         <button
                             className="logs-menu-button"
-                            onClick={() =>
-                                setSidebarOpen(true)
-                            }
+                            onClick={() => setSidebarOpen(true)}
+                            aria-label="Open navigation"
                         >
                             ☰
                         </button>
 
-
                         <div>
-
                             <div className="logs-breadcrumb">
-                                HYDROCONTROL / SYSTEM
+                                HYDROCONTROL <span>/</span> MONITORING
                             </div>
 
-
-                            <h1>
-                                System Logs
-                            </h1>
-
+                            <h1>System Logs</h1>
 
                             <p>
-                                Monitor system events,
-                                hardware activity,
-                                warnings, and
-                                controller operations.
+                                Review recorded events, user activity,
+                                device operations, and system warnings.
                             </p>
-
                         </div>
-
                     </div>
 
-
-                    <div className="logs-header-status">
-
-                        <span></span>
-
-                        SYSTEM ONLINE
-
+                    <div
+                        className={`logs-api-status ${
+                            apiOnline === true
+                                ? "is-online"
+                                : apiOnline === false
+                                    ? "is-offline"
+                                    : "is-unknown"
+                        }`}
+                        role="status"
+                    >
+                        <span className="status-dot" />
+                        {apiOnline === true
+                            ? "API CONNECTED"
+                            : apiOnline === false
+                                ? "API UNAVAILABLE"
+                                : "CHECKING API"}
                     </div>
-
                 </header>
 
+                {error && (
+                    <div className="logs-alert" role="alert">
+                        <span className="logs-alert-icon">!</span>
 
-                {/* =========================================
-                    STATISTICS
-                ========================================= */}
+                        <div>
+                            <strong>Could not refresh logs</strong>
+                            <p>{error}</p>
+                            {logs.length > 0 && (
+                                <small>
+                                    Showing previously loaded records.
+                                </small>
+                            )}
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={handleRefresh}
+                            disabled={loading || refreshing}
+                        >
+                            Retry
+                        </button>
+                    </div>
+                )}
 
                 <section className="logs-stats">
-
-
-                    <div className="logs-stat-card">
-
-                        <div className="logs-stat-header">
-
-                            <div className="logs-stat-icon">
-                                ◉
-                            </div>
-
+                    <article className="logs-stat-card">
+                        <div className="logs-stat-top">
+                            <span className="logs-stat-icon">≡</span>
                             <span className="logs-stat-label">
-                                TOTAL LOGS
+                                TOTAL RECORDS
                             </span>
-
                         </div>
 
+                        <strong className="logs-stat-value">
+                            {statistics.total.toLocaleString()}
+                        </strong>
 
-                        <div className="logs-stat-value">
-                            {totalLogs.toLocaleString()}
-                        </div>
+                        <span className="logs-stat-note">
+                            Records loaded from the database
+                        </span>
+                    </article>
 
-
-                        <div className="logs-stat-footer">
-
-                            <span>
-                                Database records
-                            </span>
-
-                            <strong>
-                                {filteredLogs.length}
-                            </strong>
-
-                        </div>
-
-                    </div>
-
-
-                    <div className="logs-stat-card">
-
-                        <div className="logs-stat-header">
-
-                            <div className="logs-stat-icon success-icon">
-                                ✓
-                            </div>
-
+                    <article className="logs-stat-card">
+                        <div className="logs-stat-top">
+                            <span className="logs-stat-icon success">✓</span>
                             <span className="logs-stat-label">
-                                SUCCESS EVENTS
+                                SUCCESS
                             </span>
-
                         </div>
 
+                        <strong className="logs-stat-value">
+                            {statistics.SUCCESS.toLocaleString()}
+                        </strong>
 
-                        <div className="logs-stat-value">
-                            {successLogs.toLocaleString()}
-                        </div>
+                        <span className="logs-stat-note">
+                            Successful operations
+                        </span>
+                    </article>
 
-
-                        <div className="logs-stat-footer">
-
-                            <span>
-                                System operations
-                            </span>
-
-                            <strong>
-                                {successPercentage}%
-                            </strong>
-
-                        </div>
-
-                    </div>
-
-
-                    <div className="logs-stat-card">
-
-                        <div className="logs-stat-header">
-
-                            <div className="logs-stat-icon warning-icon">
-                                !
-                            </div>
-
+                    <article className="logs-stat-card">
+                        <div className="logs-stat-top">
+                            <span className="logs-stat-icon warning">!</span>
                             <span className="logs-stat-label">
                                 WARNINGS
                             </span>
-
                         </div>
 
+                        <strong className="logs-stat-value">
+                            {statistics.WARNING.toLocaleString()}
+                        </strong>
 
-                        <div className="logs-stat-value warning-value">
-                            {warningLogs.toLocaleString()}
-                        </div>
+                        <span className="logs-stat-note">
+                            Events to review
+                        </span>
+                    </article>
 
-
-                        <div className="logs-stat-footer">
-
-                            <span>
-                                Needs attention
-                            </span>
-
-                            <strong>
-                                {warningPercentage}%
-                            </strong>
-
-                        </div>
-
-                    </div>
-
-
-                    <div className="logs-stat-card">
-
-                        <div className="logs-stat-header">
-
-                            <div className="logs-stat-icon error-icon">
-                                ×
-                            </div>
-
+                    <article className="logs-stat-card">
+                        <div className="logs-stat-top">
+                            <span className="logs-stat-icon danger">×</span>
                             <span className="logs-stat-label">
                                 ERRORS
                             </span>
-
                         </div>
 
+                        <strong className="logs-stat-value">
+                            {statistics.ERROR.toLocaleString()}
+                        </strong>
 
-                        <div className="logs-stat-value error-value">
-                            {errorLogs.toLocaleString()}
-                        </div>
-
-
-                        <div className="logs-stat-footer">
-
-                            <span>
-                                Requires review
-                            </span>
-
-                            <strong>
-                                {errorPercentage}%
-                            </strong>
-
-                        </div>
-
-                    </div>
-
+                        <span className="logs-stat-note">
+                            Failed or problematic events
+                        </span>
+                    </article>
                 </section>
 
-
-                {/* =========================================
-                    SYSTEM INFORMATION
-                ========================================= */}
-
                 <section className="logs-content">
-
-
-                    <div className="logs-panel system-info-panel">
-
-                        <div className="logs-panel-header">
-
+                    <aside className="logs-panel logs-info-panel">
+                        <div className="logs-panel-heading">
                             <div>
-
-                                <span className="logs-panel-label">
-                                    CONTROLLER
+                                <span className="logs-eyebrow">
+                                    OVERVIEW
                                 </span>
-
-                                <h2>
-                                    System Information
-                                </h2>
-
+                                <h2>Log Information</h2>
                             </div>
 
+                            <span className="logs-panel-icon">◷</span>
                         </div>
 
-
-                        <div className="system-info-list">
-
-
-                            <div>
-
-                                <span>
-                                    Controller
-                                </span>
-
+                        <div className="logs-info-list">
+                            <div className="logs-info-row">
+                                <span>API status</span>
                                 <strong>
-                                    ESP32-WROOM-32
+                                    {apiOnline === true
+                                        ? "Connected"
+                                        : apiOnline === false
+                                            ? "Unavailable"
+                                            : "Checking"}
                                 </strong>
-
                             </div>
 
-
-                            <div>
-
-                                <span>
-                                    Firmware
-                                </span>
-
-                                <strong>
-                                    v2.4.1
-                                </strong>
-
+                            <div className="logs-info-row">
+                                <span>Loaded records</span>
+                                <strong>{logs.length}</strong>
                             </div>
 
-
-                            <div>
-
-                                <span>
-                                    Log Records
-                                </span>
-
-                                <strong>
-                                    {totalLogs}
-                                </strong>
-
-                            </div>
-
-
-                            <div>
-
-                                <span>
-                                    Last Login
-                                </span>
-
+                            <div className="logs-info-row">
+                                <span>Last login</span>
                                 <strong>
                                     {lastLogin
-                                        ? formatDateTime(
-                                            lastLogin
-                                        )
-                                        : "No login recorded"}
+                                        ? formatDateTime(lastLogin)
+                                        : "Not available"}
                                 </strong>
-
                             </div>
 
+                            <div className="logs-info-row">
+                                <span>Last log event</span>
+                                <strong>
+                                    {latestEvent
+                                        ? formatDateTime(latestEvent.timestamp)
+                                        : "No events"}
+                                </strong>
+                            </div>
+
+                            <div className="logs-info-row">
+                                <span>Last successful refresh</span>
+                                <strong>
+                                    {lastUpdated
+                                        ? formatTime(lastUpdated)
+                                        : "--"}
+                                </strong>
+                            </div>
                         </div>
 
-                    </div>
+                        <div className="logs-info-footnote">
+                            API connectivity does not confirm that the
+                            ESP32 controller itself is online.
+                        </div>
+                    </aside>
 
-
-                    {/* =====================================
-                        EVENT LOGS
-                    ===================================== */}
-
-                    <div className="logs-panel">
-
-                        <div className="logs-panel-header">
-
+                    <section className="logs-panel logs-events-panel">
+                        <div className="logs-panel-heading logs-events-heading">
                             <div>
-
-                                <span className="logs-panel-label">
-                                    ACTIVITY HISTORY
+                                <span className="logs-eyebrow">
+                                    AUDIT TRAIL
                                 </span>
-
-                                <h2>
-                                    System Event Logs
-                                </h2>
-
+                                <h2>Event History</h2>
+                                <p>
+                                    Search, filter, and export recorded activity.
+                                </p>
                             </div>
 
+                            <div className="logs-actions">
+                                <button
+                                    className="logs-button logs-button-secondary"
+                                    type="button"
+                                    onClick={exportCSV}
+                                    disabled={!filteredLogs.length}
+                                >
+                                    ↓ Export CSV
+                                </button>
 
-                            <button
-                                className="logs-refresh-button"
-                                onClick={handleRefresh}
-                                disabled={loading}
-                            >
-                                ↻ Refresh
-                            </button>
-
+                                <button
+                                    className="logs-button logs-button-primary"
+                                    type="button"
+                                    onClick={handleRefresh}
+                                    disabled={loading || refreshing}
+                                >
+                                    <span
+                                        className={refreshing ? "logs-spin" : ""}
+                                    >
+                                        ↻
+                                    </span>
+                                    {refreshing ? "Refreshing" : "Refresh"}
+                                </button>
+                            </div>
                         </div>
 
-
-                        {/* =================================
-                            FILTERS
-                        ================================= */}
-
-                        <div className="logs-filters">
-
-
-                            <div className="logs-search">
-
-                                <span>
-                                    ⌕
-                                </span>
-
+                        <div className="logs-toolbar">
+                            <label className="logs-search">
+                                <span aria-hidden="true">⌕</span>
                                 <input
-                                    type="text"
-                                    placeholder="Search system logs..."
+                                    type="search"
                                     value={searchTerm}
-                                    onChange={(e) =>
-                                        setSearchTerm(
-                                            e.target.value
-                                        )
+                                    onChange={(event) =>
+                                        setSearchTerm(event.target.value)
                                     }
+                                    placeholder="Search events, device, user..."
+                                    aria-label="Search system logs"
                                 />
-
-                            </div>
-
+                            </label>
 
                             <select
                                 value={severityFilter}
-                                onChange={(e) =>
-                                    setSeverityFilter(
-                                        e.target.value
-                                    )
+                                onChange={(event) =>
+                                    setSeverityFilter(event.target.value)
                                 }
+                                aria-label="Filter by severity"
                             >
-
-                                <option value="All">
-                                    All Severity
-                                </option>
-
-                                <option value="INFO">
-                                    Info
-                                </option>
-
-                                <option value="SUCCESS">
-                                    Success
-                                </option>
-
-                                <option value="WARNING">
-                                    Warning
-                                </option>
-
-                                <option value="ERROR">
-                                    Error
-                                </option>
-
+                                <option value="All">All levels</option>
+                                {[...new Set([
+                                    ...LEVELS,
+                                    ...availableLevels.map(normalizeLevel)
+                                ])].map((level) => (
+                                    <option key={level} value={level}>
+                                        {level}
+                                    </option>
+                                ))}
                             </select>
-
 
                             <select
                                 value={categoryFilter}
-                                onChange={(e) =>
-                                    setCategoryFilter(
-                                        e.target.value
-                                    )
+                                onChange={(event) =>
+                                    setCategoryFilter(event.target.value)
                                 }
+                                aria-label="Filter by category"
                             >
-
-                                <option value="All">
-                                    All Categories
-                                </option>
-
-                                <option value="SYSTEM">
-                                    System
-                                </option>
-
-                                <option value="PUMP">
-                                    Pump
-                                </option>
-
-                                <option value="WATER">
-                                    Water
-                                </option>
-
-                                <option value="PH">
-                                    pH
-                                </option>
-
-                                <option value="NUTRIENT">
-                                    Nutrient
-                                </option>
-
-                                <option value="TEMPERATURE">
-                                    Temperature
-                                </option>
-
-                                <option value="SENSOR">
-                                    Sensor
-                                </option>
-
-                                <option value="NETWORK">
-                                    Network
-                                </option>
-
+                                <option value="All">All categories</option>
+                                {availableCategories.map((category) => (
+                                    <option key={category} value={category}>
+                                        {category}
+                                    </option>
+                                ))}
                             </select>
 
+                            {(searchTerm ||
+                                severityFilter !== "All" ||
+                                categoryFilter !== "All") && (
+                                <button
+                                    className="logs-clear-button"
+                                    type="button"
+                                    onClick={clearFilters}
+                                >
+                                    Clear filters
+                                </button>
+                            )}
                         </div>
 
-
-                        {/* =================================
-                            TABLE
-                        ================================= */}
+                        <div className="logs-results-summary">
+                            <span>
+                                <strong>{filteredLogs.length}</strong>
+                                {" "}matching events
+                            </span>
+                            <span>Newest events first</span>
+                        </div>
 
                         <div className="logs-table-wrapper">
-
                             <table className="logs-table">
-
                                 <thead>
-
                                     <tr>
-
-                                        <th>
-                                            TIME
-                                        </th>
-
-                                        <th>
-                                            LEVEL
-                                        </th>
-
-                                        <th>
-                                            CATEGORY
-                                        </th>
-
-                                        <th>
-                                            EVENT
-                                        </th>
-
-                                        <th>
-                                            DEVICE
-                                        </th>
-
-                                        <th>
-                                            DETAILS
-                                        </th>
-
+                                        <th>TIME</th>
+                                        <th>LEVEL</th>
+                                        <th>CATEGORY</th>
+                                        <th>EVENT / DETAILS</th>
+                                        <th>DEVICE</th>
+                                        <th>USER</th>
                                     </tr>
-
                                 </thead>
 
-
                                 <tbody>
-
-
-                                    {loading && (
-
+                                    {loading && logs.length === 0 && (
                                         <tr>
-
-                                            <td
-                                                colSpan="6"
-                                                className="logs-loading"
-                                            >
+                                            <td colSpan={6} className="logs-table-message">
+                                                <span className="logs-loader" />
                                                 Loading system logs...
                                             </td>
-
                                         </tr>
-
                                     )}
 
+                                    {!loading && logs.length === 0 && !error && (
+                                        <tr>
+                                            <td colSpan={6} className="logs-table-message">
+                                                <div className="logs-empty-icon">≡</div>
+                                                <strong>No system events yet</strong>
+                                                <span>
+                                                    New records will appear here
+                                                    when your backend writes them.
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    )}
 
-                                    {!loading &&
-                                        error && (
+                                    {filteredLogs.map((log) => {
+                                        const level = normalizeLevel(log.level);
 
-                                            <tr>
-
-                                                <td
-                                                    colSpan="6"
-                                                    className="logs-error"
-                                                >
-                                                    {error}
+                                        return (
+                                            <tr key={log.id}>
+                                                <td>
+                                                    <div className="logs-time-cell">
+                                                        <strong>
+                                                            {formatTime(log.timestamp)}
+                                                        </strong>
+                                                        <span>
+                                                            {log.timestamp
+                                                                ? new Date(log.timestamp)
+                                                                    .toLocaleDateString()
+                                                                : "--"}
+                                                        </span>
+                                                    </div>
                                                 </td>
 
-                                            </tr>
+                                                <td>
+                                                    <span
+                                                        className={`log-level ${level.toLowerCase()}`}
+                                                    >
+                                                        <i>
+                                                            {level === "SUCCESS"
+                                                                ? "✓"
+                                                                : level === "WARNING"
+                                                                    ? "!"
+                                                                    : level === "ERROR"
+                                                                        ? "×"
+                                                                        : "i"}
+                                                        </i>
+                                                        {level}
+                                                    </span>
+                                                </td>
 
-                                        )}
+                                                <td>
+                                                    <span className="log-category">
+                                                        {log.category || "SYSTEM"}
+                                                    </span>
+                                                </td>
 
+                                                <td className="logs-event-cell">
+                                                    <strong>
+                                                        {log.event || "Unknown event"}
+                                                    </strong>
+                                                    <p>
+                                                        {log.details || "No additional details"}
+                                                    </p>
+                                                </td>
 
-                                    {!loading &&
-                                        !error &&
-                                        filteredLogs.map(
-                                            (log) => (
-
-                                                <tr
-                                                    key={log.id}
-                                                >
-
-                                                    <td>
-
-                                                        <div className="log-time">
-
-                                                            <strong>
-                                                                {formatTime(
-                                                                    log.timestamp
-                                                                )}
-                                                            </strong>
-
-                                                            <span>
-                                                                {formatDate(
-                                                                    log.timestamp
-                                                                )}
-                                                            </span>
-
-                                                        </div>
-
-                                                    </td>
-
-
-                                                    <td>
-
-                                                        <span
-                                                            className={
-                                                                `log-level ${String(
-                                                                    log.level ||
-                                                                    "INFO"
-                                                                ).toLowerCase()}`
-                                                            }
-                                                        >
-
-                                                            <i>
-                                                                {getLevelIcon(
-                                                                    log.level
-                                                                )}
-                                                            </i>
-
-                                                            {log.level ||
-                                                                "INFO"}
-
-                                                        </span>
-
-                                                    </td>
-
-
-                                                    <td>
-
-                                                        <span className="log-category">
-
-                                                            {log.category ||
-                                                                "SYSTEM"}
-
-                                                        </span>
-
-                                                    </td>
-
-
-                                                    <td>
-
-                                                        <strong className="log-event">
-
-                                                            {log.event ||
-                                                                "Unknown event"}
-
+                                                <td>
+                                                    <div className="logs-device-cell">
+                                                        <strong>
+                                                            {log.device || "System"}
                                                         </strong>
+                                                        {log.device_uid && (
+                                                            <span>{log.device_uid}</span>
+                                                        )}
+                                                    </div>
+                                                </td>
 
-                                                    </td>
-
-
-                                                    <td>
-
-                                                        <span className="log-device">
-
-                                                            {log.device ||
-                                                                "System"}
-
-                                                        </span>
-
-                                                    </td>
-
-
-                                                    <td>
-
-                                                        <span className="log-details">
-
-                                                            {log.details ||
-                                                                "—"}
-
-                                                        </span>
-
-                                                    </td>
-
-                                                </tr>
-
-                                            )
-                                        )}
-
+                                                <td className="logs-user-cell">
+                                                    {log.user_email || "System"}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
-
                             </table>
 
-
                             {!loading &&
-                                !error &&
-                                filteredLogs.length === 0 && (
-
-                                    <div className="empty-logs">
-
-                                        <div>
-                                            ⌕
-                                        </div>
-
-                                        <strong>
-                                            No logs found
-                                        </strong>
-
+                                filteredLogs.length === 0 &&
+                                logs.length > 0 && (
+                                    <div className="logs-filter-empty">
+                                        <strong>No matching events</strong>
                                         <span>
-                                            Try changing your
-                                            search or filters.
+                                            Try another search or clear your filters.
                                         </span>
-
+                                        <button
+                                            type="button"
+                                            onClick={clearFilters}
+                                        >
+                                            Clear filters
+                                        </button>
                                     </div>
-
                                 )}
-
                         </div>
 
-
-                        {/* =================================
-                            FOOTER
-                        ================================= */}
-
-                        <div className="logs-table-footer">
-
+                        <footer className="logs-table-footer">
                             <span>
-
-                                Showing{" "}
-
-                                {filteredLogs.length}
-
-                                {" "}of{" "}
-
-                                {logs.length}
-
-                                {" "}events
-
+                                Displaying {filteredLogs.length} of {logs.length} loaded records
                             </span>
 
-
                             <span>
-
-                                Last updated:{" "}
-
-                                {lastUpdated
-                                    ? lastUpdated.toLocaleTimeString(
-                                        [],
-                                        {
-                                            hour: "2-digit",
-                                            minute: "2-digit"
-                                        }
-                                    )
-                                    : "--"}
-
+                                {refreshing
+                                    ? "Updating…"
+                                    : lastUpdated
+                                        ? `Updated ${formatTime(lastUpdated)}`
+                                        : "Not yet updated"}
                             </span>
-
-                        </div>
-
-                    </div>
-
+                        </footer>
+                    </section>
                 </section>
 
-
-                {/* =========================================
-                    FOOTER
-                ========================================= */}
-
                 <footer className="logs-footer">
-
+                    <span>© 2026 HydroControl</span>
+                    <span>System Audit &amp; Event Monitoring</span>
                     <span>
-                        © 2026 HydroControl
+                        {apiOnline === true
+                            ? "API connected"
+                            : apiOnline === false
+                                ? "API disconnected"
+                                : "Checking connection"}
                     </span>
-
-                    <span>
-                        System Logs • ESP32 Controller
-                    </span>
-
-                    <span>
-                        System Status: Online
-                    </span>
-
                 </footer>
-
             </main>
-
         </div>
     );
 }
-
 
 export default SystemLogs;
