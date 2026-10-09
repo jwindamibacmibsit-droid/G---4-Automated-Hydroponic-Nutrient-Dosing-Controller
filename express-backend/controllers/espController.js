@@ -88,34 +88,66 @@ async function findDevice() {
 // 1. RECEIVE ESP32 SENSOR DATA
 // POST /api/esp/sensors
 // ========================================
+
 async function receiveSensorData(req, res, next) {
     try {
+        // ========================================
+        // 1. READ ESP32 REQUEST BODY
+        // ========================================
         const {
             device_uid,
             ph,
-            water_distance_cm,
-            water_level_cm,
-            water_percentage,
+            water_distance_cm = null,
+            water_level_cm = null,
+            water_percentage = null,
         } = req.body || {};
 
-        if (device_uid !== DEVICE_UID) {
+        // ========================================
+        // 2. VALIDATE DEVICE UID
+        // ========================================
+        if (
+            typeof device_uid !== "string" ||
+            device_uid !== DEVICE_UID
+        ) {
             return res.status(400).json({
                 success: false,
                 message: "Invalid device UID",
             });
         }
 
-        const readings = {
-            ph,
+        // ========================================
+        // 3. VALIDATE pH VALUE
+        // ========================================
+        if (
+            typeof ph !== "number" ||
+            !Number.isFinite(ph) ||
+            ph < 0 ||
+            ph > 14
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid pH value. Expected a number from 0 to 14.",
+            });
+        }
+
+        // ========================================
+        // 4. VALIDATE OPTIONAL WATER READINGS
+        // null is allowed when the ultrasonic sensor fails.
+        // ========================================
+        const waterReadings = {
             water_distance_cm,
             water_level_cm,
             water_percentage,
         };
 
-        for (const [key, value] of Object.entries(readings)) {
+        for (const [key, value] of Object.entries(waterReadings)) {
             if (
-                typeof value !== "number" ||
-                !Number.isFinite(value)
+                value !== null &&
+                (
+                    typeof value !== "number" ||
+                    !Number.isFinite(value) ||
+                    value < 0
+                )
             ) {
                 return res.status(400).json({
                     success: false,
@@ -125,49 +157,77 @@ async function receiveSensorData(req, res, next) {
         }
 
         if (
-            ph < 0 || ph > 14 ||
-            water_distance_cm < 0 ||
-            water_level_cm < 0 ||
-            water_percentage < 0 ||
+            water_percentage !== null &&
             water_percentage > 100
         ) {
             return res.status(400).json({
                 success: false,
-                message: "Sensor values are outside valid ranges",
+                message: "Water percentage must be between 0 and 100",
             });
         }
 
+        // ========================================
+        // 5. FIND REGISTERED DEVICE IN SUPABASE
+        // ========================================
         const device = await findDevice();
 
         if (!device) {
             return res.status(404).json({
                 success: false,
                 message: "Device is not registered in Supabase",
+                device_uid,
             });
         }
 
+        // ========================================
+        // 6. PREPARE SENSOR READING
+        // ========================================
         const now = new Date().toISOString();
 
-        // Match the actual sensor_reading schema.
-        const { data: reading, error: readingError } =
-            await supabase
-                .from("sensor_reading")
-                .insert({
-                    device_id: device.id,
-                    ph_value: ph,
-                    water_level: water_percentage,
-                    water_distance_cm,
-                    water_level_cm,
-                    water_percentage,
-                    timestamp: now,
-                })
-                .select()
-                .single();
+        const sensorData = {
+            device_id: device.id,
+            ph_value: ph,
 
-        if (readingError) throw readingError;
+            // Your existing schema uses water_level.
+            water_level: water_percentage,
 
-        // Update device heartbeat only after reading is saved.
-        const { error: heartbeatError } = await supabase
+            water_distance_cm,
+            water_level_cm,
+            water_percentage,
+            timestamp: now,
+        };
+
+        // ========================================
+        // 7. SAVE SENSOR READING
+        // ========================================
+        const {
+            data: reading,
+            error: readingError,
+        } = await supabase
+            .from("sensor_reading")
+            .insert(sensorData)
+            .select()
+            .single();
+
+        if (readingError) {
+            console.error(
+                "Failed to insert sensor reading:",
+                readingError
+            );
+
+            return res.status(500).json({
+                success: false,
+                message: "Failed to save sensor data",
+                error: readingError.message,
+            });
+        }
+
+        // ========================================
+        // 8. UPDATE DEVICE HEARTBEAT
+        // ========================================
+        const {
+            error: heartbeatError,
+        } = await supabase
             .from("devices")
             .update({
                 status: "online",
@@ -176,23 +236,42 @@ async function receiveSensorData(req, res, next) {
             .eq("id", device.id);
 
         if (heartbeatError) {
-            console.error("Device heartbeat update failed:", heartbeatError);
+            console.error(
+                "Failed to update device heartbeat:",
+                heartbeatError
+            );
 
             return res.status(500).json({
                 success: false,
-                message: "Reading saved, but heartbeat update failed",
+                message: "Sensor data saved, but device status update failed",
+                data: reading,
+                error: heartbeatError.message,
             });
         }
+
+        // ========================================
+        // 9. RETURN SUCCESS
+        // ========================================
+        res.set("Cache-Control", "no-store");
 
         return res.status(201).json({
             success: true,
             message: "Sensor data saved successfully",
+            device: {
+                id: device.id,
+                device_uid: device.device_uid,
+                status: "online",
+                last_seen: now,
+            },
             data: reading,
         });
+
     } catch (error) {
+        console.error("receiveSensorData error:", error);
         next(error);
     }
 }
+
 
 // ========================================
 // 2. GET LATEST SENSOR READING
