@@ -1,19 +1,35 @@
 
+const crypto = require("crypto");
 const supabase = require("../config/supabase");
 
-const DEVICE_UID = "ESP32-HYDRO-001";
+const DEVICE_UID =
+    process.env.DEVICE_UID || "ESP32-HYDRO-001";
+
+const DEVICE_API_KEY = process.env.DEVICE_API_KEY;
 
 // ========================================
 // ESP32 AUTHENTICATION
 // ========================================
 function validDevice(req, res, next) {
-    const expected = process.env.DEVICE_API;
-    const supplied = req.get("x-device-token");
+    const supplied = req.get("x-device-token") || "";
 
-    if (!expected || !supplied || supplied !== expected) {
+    if (!DEVICE_API_KEY || !supplied) {
         return res.status(401).json({
             success: false,
-            message: "Invalid device credentials"
+            message: "Invalid device credentials",
+        });
+    }
+
+    const expectedBuffer = Buffer.from(DEVICE_API_KEY);
+    const suppliedBuffer = Buffer.from(supplied);
+
+    if (
+        expectedBuffer.length !== suppliedBuffer.length ||
+        !crypto.timingSafeEqual(expectedBuffer, suppliedBuffer)
+    ) {
+        return res.status(401).json({
+            success: false,
+            message: "Invalid device credentials",
         });
     }
 
@@ -22,7 +38,6 @@ function validDevice(req, res, next) {
 
 // ========================================
 // WEBSITE AUTHENTICATION
-// Requires a valid Supabase access token.
 // ========================================
 async function requireUser(req, res, next) {
     try {
@@ -34,7 +49,7 @@ async function requireUser(req, res, next) {
         if (!token) {
             return res.status(401).json({
                 success: false,
-                message: "Authentication required"
+                message: "Authentication required",
             });
         }
 
@@ -43,7 +58,7 @@ async function requireUser(req, res, next) {
         if (error || !data.user) {
             return res.status(401).json({
                 success: false,
-                message: "Invalid or expired session"
+                message: "Invalid or expired session",
             });
         }
 
@@ -55,7 +70,22 @@ async function requireUser(req, res, next) {
 }
 
 // ========================================
-// 1. RECEIVE SENSOR DATA FROM ESP32
+// FIND REGISTERED DEVICE
+// ========================================
+async function findDevice() {
+    const { data, error } = await supabase
+        .from("devices")
+        .select("id, device_uid, device_name, status, last_seen")
+        .eq("device_uid", DEVICE_UID)
+        .maybeSingle();
+
+    if (error) throw error;
+
+    return data;
+}
+
+// ========================================
+// 1. RECEIVE ESP32 SENSOR DATA
 // POST /api/esp/sensors
 // ========================================
 async function receiveSensorData(req, res, next) {
@@ -65,13 +95,13 @@ async function receiveSensorData(req, res, next) {
             ph,
             water_distance_cm,
             water_level_cm,
-            water_percentage
+            water_percentage,
         } = req.body || {};
 
         if (device_uid !== DEVICE_UID) {
             return res.status(400).json({
                 success: false,
-                message: "Invalid device UID"
+                message: "Invalid device UID",
             });
         }
 
@@ -79,65 +109,85 @@ async function receiveSensorData(req, res, next) {
             ph,
             water_distance_cm,
             water_level_cm,
-            water_percentage
+            water_percentage,
         };
 
         for (const [key, value] of Object.entries(readings)) {
             if (
-                value !== null &&
-                value !== undefined &&
-                (typeof value !== "number" || !Number.isFinite(value))
+                typeof value !== "number" ||
+                !Number.isFinite(value)
             ) {
                 return res.status(400).json({
                     success: false,
-                    message: `Invalid sensor value: ${key}`
+                    message: `Invalid sensor value: ${key}`,
                 });
             }
         }
 
-        const { data: device, error: deviceError } = await supabase
-            .from("devices")
-            .select("id")
-            .eq("device_uid", DEVICE_UID)
-            .maybeSingle();
+        if (
+            ph < 0 || ph > 14 ||
+            water_distance_cm < 0 ||
+            water_level_cm < 0 ||
+            water_percentage < 0 ||
+            water_percentage > 100
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Sensor values are outside valid ranges",
+            });
+        }
 
-        if (deviceError) throw deviceError;
+        const device = await findDevice();
 
         if (!device) {
             return res.status(404).json({
                 success: false,
-                message: "Device is not registered in Supabase"
+                message: "Device is not registered in Supabase",
             });
         }
 
-        const { data, error } = await supabase
-            .from("sensor_logs")
-            .insert([{
-                device_uid: DEVICE_UID,
-                ph: ph ?? null,
-                water_distance_cm: water_distance_cm ?? null,
-                water_level_cm: water_level_cm ?? null,
-                water_percentage: water_percentage ?? null
-            }])
-            .select()
-            .single();
+        const now = new Date().toISOString();
 
-        if (error) throw error;
+        // Match the actual sensor_reading schema.
+        const { data: reading, error: readingError } =
+            await supabase
+                .from("sensor_reading")
+                .insert({
+                    device_id: device.id,
+                    ph_value: ph,
+                    water_level: water_percentage,
+                    water_distance_cm,
+                    water_level_cm,
+                    water_percentage,
+                    timestamp: now,
+                })
+                .select()
+                .single();
 
-        const { error: updateError } = await supabase
+        if (readingError) throw readingError;
+
+        // Update device heartbeat only after reading is saved.
+        const { error: heartbeatError } = await supabase
             .from("devices")
             .update({
                 status: "online",
-                last_seen: new Date().toISOString()
+                last_seen: now,
             })
-            .eq("device_uid", DEVICE_UID);
+            .eq("id", device.id);
 
-        if (updateError) throw updateError;
+        if (heartbeatError) {
+            console.error("Device heartbeat update failed:", heartbeatError);
+
+            return res.status(500).json({
+                success: false,
+                message: "Reading saved, but heartbeat update failed",
+            });
+        }
 
         return res.status(201).json({
             success: true,
             message: "Sensor data saved successfully",
-            data
+            data: reading,
         });
     } catch (error) {
         next(error);
@@ -145,16 +195,26 @@ async function receiveSensorData(req, res, next) {
 }
 
 // ========================================
-// 2. GET LATEST SENSOR DATA FOR WEBSITE
+// 2. GET LATEST SENSOR READING
 // GET /api/esp/dashboard/latest
 // ========================================
 async function getLatestSensorData(req, res, next) {
     try {
+        const device = await findDevice();
+
+        if (!device) {
+            return res.status(404).json({
+                success: false,
+                message: "Device is not registered",
+                data: null,
+            });
+        }
+
         const { data, error } = await supabase
-            .from("sensor_logs")
+            .from("sensor_reading")
             .select("*")
-            .eq("device_uid", DEVICE_UID)
-            .order("created_at", { ascending: false })
+            .eq("device_id", device.id)
+            .order("timestamp", { ascending: false })
             .limit(1)
             .maybeSingle();
 
@@ -164,7 +224,8 @@ async function getLatestSensorData(req, res, next) {
 
         return res.json({
             success: true,
-            data: data || null
+            device,
+            data: data || null,
         });
     } catch (error) {
         next(error);
@@ -172,8 +233,9 @@ async function getLatestSensorData(req, res, next) {
 }
 
 // ========================================
-// 3. QUEUE A PUMP COMMAND FROM WEBSITE
+// 3. QUEUE PUMP COMMAND
 // POST /api/esp/pumps/commands
+// Requires website authentication.
 // ========================================
 async function createPumpCommand(req, res, next) {
     try {
@@ -182,7 +244,7 @@ async function createPumpCommand(req, res, next) {
         const allowedPumps = [
             "ph",
             "nutrient_a",
-            "nutrient_b"
+            "nutrient_b",
         ];
 
         if (
@@ -193,49 +255,44 @@ async function createPumpCommand(req, res, next) {
         ) {
             return res.status(400).json({
                 success: false,
-                message: "Invalid pump or duration. Maximum duration is 5000 ms."
+                message: "Invalid pump or duration",
             });
         }
 
-        const { data: device, error: deviceError } = await supabase
-            .from("devices")
-            .select("id")
-            .eq("device_uid", DEVICE_UID)
-            .maybeSingle();
-
-        if (deviceError) throw deviceError;
+        const device = await findDevice();
 
         if (!device) {
             return res.status(404).json({
                 success: false,
-                message: "Device is not registered"
+                message: "Device is not registered",
             });
         }
 
-        const { data: pending, error: pendingError } = await supabase
-            .from("pump_commands")
-            .select("id")
-            .eq("device_uid", DEVICE_UID)
-            .in("status", ["pending", "claimed"])
-            .limit(1);
+        const { data: pending, error: pendingError } =
+            await supabase
+                .from("pump_commands")
+                .select("id")
+                .eq("device_id", device.id)
+                .in("status", ["pending", "processing"])
+                .limit(1);
 
         if (pendingError) throw pendingError;
 
         if (pending?.length) {
             return res.status(409).json({
                 success: false,
-                message: "Another pump command is pending or running"
+                message: "Another pump command is pending or running",
             });
         }
 
         const { data, error } = await supabase
             .from("pump_commands")
-            .insert([{
-                device_uid: DEVICE_UID,
+            .insert({
+                device_id: device.id,
                 pump,
                 duration_ms,
-                status: "pending"
-            }])
+                status: "pending",
+            })
             .select()
             .single();
 
@@ -244,7 +301,7 @@ async function createPumpCommand(req, res, next) {
         return res.status(201).json({
             success: true,
             message: "Pump command queued",
-            data
+            data,
         });
     } catch (error) {
         next(error);
@@ -252,31 +309,44 @@ async function createPumpCommand(req, res, next) {
 }
 
 // ========================================
-// 4. ESP32 POLLS FOR A PUMP COMMAND
+// 4. ESP32 POLLS FOR PUMP COMMAND
 // GET /api/esp/commands/next
 // ========================================
 async function getNextPumpCommand(req, res, next) {
     try {
+        const device = await findDevice();
+
+        if (!device) {
+            return res.status(404).json({
+                success: false,
+                message: "Device is not registered",
+            });
+        }
+
         const cutoff = new Date(
-            Date.now() - 60000
+            Date.now() - 60_000
         ).toISOString();
 
-        // Expire commands not collected within 60 seconds.
+        // Expire stale pending commands using the real created_at column.
         const { error: expireError } = await supabase
             .from("pump_commands")
-            .update({ status: "expired" })
-            .eq("device_uid", DEVICE_UID)
+            .update({
+                status: "failed",
+                result_message: "Command expired before pickup",
+                updated_at: new Date().toISOString(),
+            })
+            .eq("device_id", device.id)
             .eq("status", "pending")
-            .lt("requested_at", cutoff);
+            .lt("created_at", cutoff);
 
         if (expireError) throw expireError;
 
         const { data: command, error } = await supabase
             .from("pump_commands")
             .select("id, pump, duration_ms")
-            .eq("device_uid", DEVICE_UID)
+            .eq("device_id", device.id)
             .eq("status", "pending")
-            .order("requested_at", { ascending: true })
+            .order("created_at", { ascending: true })
             .limit(1)
             .maybeSingle();
 
@@ -285,18 +355,19 @@ async function getNextPumpCommand(req, res, next) {
         if (!command) {
             return res.json({
                 success: true,
-                command: null
+                command: null,
             });
         }
 
-        // Conditional claim prevents most duplicate claims.
+        // Claim the command atomically where possible.
         const { data: claimed, error: claimError } = await supabase
             .from("pump_commands")
             .update({
-                status: "claimed",
-                claimed_at: new Date().toISOString()
+                status: "processing",
+                updated_at: new Date().toISOString(),
             })
             .eq("id", command.id)
+            .eq("device_id", device.id)
             .eq("status", "pending")
             .select("id, pump, duration_ms")
             .maybeSingle();
@@ -305,7 +376,7 @@ async function getNextPumpCommand(req, res, next) {
 
         return res.json({
             success: true,
-            command: claimed || null
+            command: claimed || null,
         });
     } catch (error) {
         next(error);
@@ -313,39 +384,50 @@ async function getNextPumpCommand(req, res, next) {
 }
 
 // ========================================
-// 5. REPORT PUMP COMMAND RESULT
+// 5. REPORT PUMP RESULT
 // POST /api/esp/commands/:id/result
 // ========================================
 async function reportPumpResult(req, res, next) {
     try {
-        const id = Number(req.params.id);
+        const { id } = req.params;
         const { status, message } = req.body || {};
 
+        // pump_commands.id is UUID, not a serial integer.
         if (
-            !Number.isSafeInteger(id) ||
-            id <= 0 ||
+            !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) ||
             !["completed", "failed"].includes(status)
         ) {
             return res.status(400).json({
                 success: false,
-                message: "Invalid command result"
+                message: "Invalid command result",
             });
         }
+
+        const device = await findDevice();
+
+        if (!device) {
+            return res.status(404).json({
+                success: false,
+                message: "Device is not registered",
+            });
+        }
+
+        const resultMessage =
+            typeof message === "string"
+                ? message.slice(0, 250)
+                : null;
 
         const { data, error } = await supabase
             .from("pump_commands")
             .update({
                 status,
-                completed_at: new Date().toISOString(),
-                result_message:
-                    typeof message === "string"
-                        ? message.slice(0, 250)
-                        : null
+                result_message: resultMessage,
+                updated_at: new Date().toISOString(),
             })
             .eq("id", id)
-            .eq("device_uid", DEVICE_UID)
-            .eq("status", "claimed")
-            .select("id, status")
+            .eq("device_id", device.id)
+            .eq("status", "processing")
+            .select("*")
             .maybeSingle();
 
         if (error) throw error;
@@ -353,23 +435,35 @@ async function reportPumpResult(req, res, next) {
         if (!data) {
             return res.status(404).json({
                 success: false,
-                message: "Claimed command not found"
+                message: "Processing command not found",
             });
+        }
+
+        const { error: eventError } = await supabase
+            .from("pump_events")
+            .insert({
+                command_id: data.id,
+                device_id: device.id,
+                pump: data.pump,
+                duration_ms: data.duration_ms,
+                status: data.status,
+                message: resultMessage,
+            });
+
+        if (eventError) {
+            console.error("Pump event insert failed:", eventError);
         }
 
         return res.json({
             success: true,
             message: "Pump result recorded",
-            data
+            data,
         });
     } catch (error) {
         next(error);
     }
 }
 
-// ========================================
-// EXPORT CONTROLLER FUNCTIONS
-// ========================================
 module.exports = {
     validDevice,
     requireUser,
@@ -377,5 +471,5 @@ module.exports = {
     getLatestSensorData,
     createPumpCommand,
     getNextPumpCommand,
-    reportPumpResult
+    reportPumpResult,
 };

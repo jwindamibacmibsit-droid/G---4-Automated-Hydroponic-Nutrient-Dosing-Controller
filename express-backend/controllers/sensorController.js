@@ -99,7 +99,7 @@ async function getSensorHistory(req, res) {
     }
 }
 
-// GET /api/sensors/device-status
+
 async function getDeviceStatus(req, res) {
     try {
         const device = await findDevice();
@@ -107,8 +107,8 @@ async function getDeviceStatus(req, res) {
         if (!device) {
             return res.status(404).json({
                 success: false,
-                message: "HydroControl device is not registered.",
                 online: false,
+                message: "HydroControl device is not registered.",
             });
         }
 
@@ -121,6 +121,21 @@ async function getDeviceStatus(req, res) {
             lastSeenMs > 0 &&
             Date.now() - lastSeenMs <= OFFLINE_TIMEOUT_MS;
 
+        const status = online ? "online" : "offline";
+
+        if (device.status !== status) {
+            const { error: updateError } = await supabase
+                .from("devices")
+                .update({ status })
+                .eq("id", device.id);
+
+            if (updateError) {
+                console.error("Unable to persist device status:", updateError);
+            }
+        }
+
+        res.set("Cache-Control", "no-store");
+
         return res.json({
             success: true,
             online,
@@ -128,7 +143,7 @@ async function getDeviceStatus(req, res) {
                 id: device.id,
                 device_uid: device.device_uid,
                 device_name: device.device_name,
-                status: online ? "online" : "offline",
+                status,
                 last_seen: device.last_seen,
             },
         });
@@ -136,6 +151,7 @@ async function getDeviceStatus(req, res) {
         return sendError(res, "Failed to retrieve device status", error);
     }
 }
+
 
 module.exports = {
     getLatestReading,
