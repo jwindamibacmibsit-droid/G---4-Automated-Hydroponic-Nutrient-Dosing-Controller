@@ -48,7 +48,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/sensors", sensorRoutes);
 app.use("/api/health", healthRoutes);
 app.use("/api/system", systemLogsRoutes);
-app.use("/api/iot", require("./routes/iotRoutes"));
+app.use("/api/iot", require("./routes/espRoutes"));
 
 
 
