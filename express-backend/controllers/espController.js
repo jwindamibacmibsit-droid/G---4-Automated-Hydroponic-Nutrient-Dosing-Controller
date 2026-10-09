@@ -19,7 +19,6 @@ function validDevice(req, res, next) {
             message: "Invalid device credentials",
         });
     }
-
     const expectedBuffer = Buffer.from(DEVICE_API_KEY);
     const suppliedBuffer = Buffer.from(supplied);
 
