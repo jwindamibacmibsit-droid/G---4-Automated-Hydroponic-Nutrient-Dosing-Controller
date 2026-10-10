@@ -103,6 +103,7 @@ function PumpControl() {
                 `${API_BASE_URL}${COMMAND_ENDPOINT}`,
                 {
                     method: "POST",
+                    credentials: "include",
                     headers: {
                         "Content-Type": "application/json",
                     },
@@ -220,6 +221,7 @@ function PumpControl() {
                 `${API_BASE_URL}${COMMAND_ENDPOINT}`,
                 {
                     method: "POST",
+                    credentials: "include",
                     headers: {
                         "Content-Type": "application/json",
                     },
