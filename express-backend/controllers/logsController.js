@@ -13,32 +13,38 @@ const supabase = require("../config/supabase");
 const getEventHistory = async (req, res) => {
     try {
         const limit = Math.min(
-            Math.max(parseInt(req.query.limit, 10) || 20, 1),
+            Math.max(Number.parseInt(req.query.limit, 10) || 500, 1),
             500
         );
 
         const page = Math.max(
-            parseInt(req.query.page, 10) || 1,
+            Number.parseInt(req.query.page, 10) || 1,
             1
         );
 
         const from = (page - 1) * limit;
         const to = from + limit - 1;
 
-        // Fetch sensor readings from Supabase.
-        const { data: readings, error, count } = await supabase
+        // Fetch sensor readings from public.sensor_reading.
+        const {
+            data: readings,
+            error,
+            count
+        } = await supabase
             .from("sensor_reading")
             .select(
-                `id,
-                 device_id,
-                 ph_value,
-                 water_level,
-                 nutrient_a,
-                 nutrient_b,
-                 timestamp,
-                 water_distance_cm,
-                 water_level_cm,
-                 water_percentage`,
+                `
+                    id,
+                    device_id,
+                    ph_value,
+                    water_level,
+                    nutrient_a,
+                    nutrient_b,
+                    timestamp,
+                    water_distance_cm,
+                    water_level_cm,
+                    water_percentage
+                `,
                 { count: "exact" }
             )
             .order("timestamp", { ascending: false })
@@ -46,6 +52,7 @@ const getEventHistory = async (req, res) => {
 
         if (error) {
             console.error("SENSOR EVENT HISTORY ERROR:", error);
+
             return res.status(500).json({
                 success: false,
                 message: "Failed to fetch sensor readings.",
@@ -55,25 +62,29 @@ const getEventHistory = async (req, res) => {
 
         const records = readings || [];
 
-        // Fetch associated device details.
+        // Get device details for the readings.
         const deviceIds = [
             ...new Set(
                 records
-                    .map(row => row.device_id)
-                    .filter(id => id != null)
+                    .map((row) => row.device_id)
+                    .filter((id) => id != null)
             )
         ];
 
         let devices = [];
 
         if (deviceIds.length > 0) {
-            const { data, error: deviceError } = await supabase
+            const {
+                data,
+                error: deviceError
+            } = await supabase
                 .from("devices")
                 .select("id, device_name, device_uid, status")
                 .in("id", deviceIds);
 
             if (deviceError) {
-                console.error("DEVICE LOOKUP ERROR:", deviceError);
+                console.error("SENSOR DEVICE LOOKUP ERROR:", deviceError);
+
                 return res.status(500).json({
                     success: false,
                     message: "Failed to fetch device details.",
@@ -85,35 +96,40 @@ const getEventHistory = async (req, res) => {
         }
 
         const deviceMap = new Map(
-            devices.map(device => [String(device.id), device])
+            devices.map((device) => [
+                String(device.id),
+                device
+            ])
         );
 
-        // Format rows for the Event History frontend.
-        const events = records.map(row => {
+        const events = records.map((row) => {
             const device = deviceMap.get(String(row.device_id));
+
+            const details = [
+                `pH: ${row.ph_value ?? "N/A"}`,
+                `Water level: ${row.water_level ?? "N/A"}`,
+                `Nutrient A: ${row.nutrient_a ?? "N/A"}`,
+                `Nutrient B: ${row.nutrient_b ?? "N/A"}`,
+                `Water distance: ${row.water_distance_cm ?? "N/A"} cm`,
+                `Water height: ${row.water_level_cm ?? "N/A"} cm`,
+                `Water percentage: ${row.water_percentage ?? "N/A"}%`
+            ].join(" | ");
 
             return {
                 id: row.id,
                 timestamp: row.timestamp,
+
                 level: "INFO",
                 category: "SENSOR",
                 event: "Sensor reading recorded",
-
-                details: [
-                    `pH: ${row.ph_value ?? "N/A"}`,
-                    `Water level: ${row.water_level ?? "N/A"}`,
-                    `Nutrient A: ${row.nutrient_a ?? "N/A"}`,
-                    `Nutrient B: ${row.nutrient_b ?? "N/A"}`,
-                    `Distance: ${row.water_distance_cm ?? "N/A"} cm`,
-                    `Water height: ${row.water_level_cm ?? "N/A"} cm`,
-                    `Water percentage: ${row.water_percentage ?? "N/A"}%`
-                ].join(" | "),
+                details,
 
                 device_id: row.device_id,
                 device:
                     device?.device_name ||
                     device?.device_uid ||
                     `Device #${row.device_id}`,
+
                 device_uid: device?.device_uid || null,
                 device_status: device?.status || null,
 

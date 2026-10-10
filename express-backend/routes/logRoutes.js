@@ -1,17 +1,12 @@
-
 const express = require("express");
+const router = express.Router();
 
 const {
     getSystemLogs,
     getEventHistory
-} = require("../controllers/logsController");
+} = require("../controllers/logController");
 
-const router = express.Router();
-
-// System audit logs from public.system_logs
-router.get("/logs", getSystemLogs);
-
-// Sensor event history from public.sensor_reading
 router.get("/events", getEventHistory);
+router.get("/logs", getSystemLogs);
 
 module.exports = router;

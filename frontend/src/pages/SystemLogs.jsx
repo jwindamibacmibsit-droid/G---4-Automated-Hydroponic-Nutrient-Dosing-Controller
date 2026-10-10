@@ -791,9 +791,8 @@ function SystemLogs() {
                                                     </strong>
 
                                                     <span>
-                                                        New records will appear
-                                                        when your backend saves
-                                                        them to system_logs.
+                                                        New records will appear when your ESP32 uploads sensor readings
+                                                        to the sensor reading table.
                                                     </span>
                                                 </td>
                                             </tr>
