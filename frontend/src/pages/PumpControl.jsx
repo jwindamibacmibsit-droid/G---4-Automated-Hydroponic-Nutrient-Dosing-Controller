@@ -1,255 +1,390 @@
+
 import { useState } from "react";
-
 import Sidebar from "../components/Navbar";
-
 import "../css/pump-control.css";
+
+const API_BASE_URL =
+    import.meta.env.VITE_API_BASE_URL ||
+    "https://api.hydrocontrol.site";
+
+const COMMAND_ENDPOINT = "/api/esp/pumps/commands";
+const DEVICE_UID = "ESP32-HYDRO-001";
+const MAX_DURATION_MS = 5000;
+
+const INITIAL_PUMPS = [
+    {
+        id: 1,
+        name: "pH Dosing Pump",
+        type: "pH Adjustment",
+        icon: "🧪",
+        gpio: "GPIO 25",
+        command: "ph",
+        flow: "Not measured",
+        runtime: "00h 00m",
+    },
+    {
+        id: 2,
+        name: "Nutrient Pump A",
+        type: "Nutrient Dosing",
+        icon: "🧪",
+        gpio: "GPIO 26",
+        command: "nutrient_a",
+        flow: "Not measured",
+        runtime: "00h 00m",
+    },
+    {
+        id: 3,
+        name: "Nutrient Pump B",
+        type: "Nutrient Dosing",
+        icon: "💧",
+        gpio: "GPIO 27",
+        command: "nutrient_b",
+        flow: "Not measured",
+        runtime: "00h 00m",
+    },
+];
 
 function PumpControl() {
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [autoMode, setAutoMode] = useState(false);
+    const [duration, setDuration] = useState(3000);
 
-    const [pumps, setPumps] = useState([
-        {
-            id: 1,
-            name: "Main Circulation Pump",
-            type: "Water Circulation",
-            icon: "🌊",
-            gpio: "GPIO 25",
-            status: true,
-            speed: 75,
-            runtime: "08h 42m",
-            flow: "2.4 L/min"
-        },
-        {
-            id: 2,
-            name: "Nutrient Pump A",
-            type: "Nutrient Dosing",
-            icon: "🧪",
-            gpio: "GPIO 26",
-            status: true,
-            speed: 60,
-            runtime: "02h 18m",
-            flow: "1.2 L/min"
-        },
-        {
-            id: 3,
-            name: "Nutrient Pump B",
-            type: "Nutrient Dosing",
-            icon: "💧",
-            gpio: "GPIO 27",
-            status: false,
-            speed: 0,
-            runtime: "00h 00m",
-            flow: "0.0 L/min"
+    const [commands, setCommands] = useState({});
+    const [errors, setErrors] = useState({});
+    const [systemMessage, setSystemMessage] = useState("");
+    const [sendingAll, setSendingAll] = useState(false);
+
+    // A relay can switch a pump on or off, but cannot
+    // control its speed without a suitable motor controller.
+    const sendPumpCommand = async (pump, durationMs = duration) => {
+        if (autoMode) {
+            setSystemMessage(
+                "Switch to Manual mode to issue manual commands."
+            );
+            return false;
         }
-    ]);
 
-    const [autoMode, setAutoMode] = useState(true);
+        if (
+            !pump ||
+            !Number.isFinite(Number(durationMs)) ||
+            durationMs < 100 ||
+            durationMs > MAX_DURATION_MS
+        ) {
+            setSystemMessage(
+                "Pump duration must be between 100 and 5000 ms."
+            );
+            return false;
+        }
 
-    const togglePump = (id) => {
-        setPumps((currentPumps) =>
-            currentPumps.map((pump) =>
-                pump.id === id
-                    ? {
-                        ...pump,
-                        status: !pump.status,
-                        speed: !pump.status
-                            ? pump.speed || 50
-                            : 0
-                    }
-                    : pump
-            )
-        );
+        if (
+            commands[pump.id]?.status === "sending" ||
+            sendingAll
+        ) {
+            return false;
+        }
+
+        setCommands((previous) => ({
+            ...previous,
+            [pump.id]: {
+                status: "sending",
+                message: "Sending command...",
+            },
+        }));
+
+        setErrors((previous) => ({
+            ...previous,
+            [pump.id]: "",
+        }));
+
+        setSystemMessage("");
+
+        try {
+            const response = await fetch(
+                `${API_BASE_URL}${COMMAND_ENDPOINT}`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    credentials: "include",
+                    body: JSON.stringify({
+                        device_uid: DEVICE_UID,
+                        pump: pump.command,
+                        duration_ms: Number(durationMs),
+                    }),
+                }
+            );
+
+            const result = await response.json().catch(() => ({}));
+
+            if (!response.ok || result.success === false) {
+                throw new Error(
+                    result.message ||
+                    `Server request failed (${response.status}).`
+                );
+            }
+
+            setCommands((previous) => ({
+                ...previous,
+                [pump.id]: {
+                    status: "pending",
+                    message: "Command accepted; awaiting ESP32.",
+                    commandId: result.command?.id || result.id || null,
+                },
+            }));
+
+            setSystemMessage(
+                `${pump.name}: command accepted by the API.`
+            );
+
+            return true;
+        } catch (error) {
+            setCommands((previous) => ({
+                ...previous,
+                [pump.id]: {
+                    status: "failed",
+                    message: error.message,
+                },
+            }));
+
+            setErrors((previous) => ({
+                ...previous,
+                [pump.id]: error.message,
+            }));
+
+            setSystemMessage(
+                `Failed to send ${pump.name} command: ${error.message}`
+            );
+
+            return false;
+        }
     };
 
-    const updateSpeed = (id, speed) => {
-        setPumps((currentPumps) =>
-            currentPumps.map((pump) =>
-                pump.id === id
-                    ? {
-                        ...pump,
-                        speed: Number(speed),
-                        status: Number(speed) > 0
-                    }
-                    : pump
-            )
-        );
+    const runPump = (pump) => {
+        return sendPumpCommand(pump, duration);
     };
+
+    const startAllPumps = async () => {
+        if (autoMode || sendingAll) return;
+
+        setSendingAll(true);
+        setSystemMessage("Sending pump commands...");
+
+        try {
+            // Queue one command at a time. The backend must
+            // support multiple pending commands for this to work.
+            for (const pump of INITIAL_PUMPS) {
+                const accepted = await sendPumpCommandInternal(
+                    pump,
+                    duration
+                );
+
+                if (!accepted) {
+                    setSystemMessage(
+                        `Stopped queueing after ${pump.name} failed.`
+                    );
+                    return;
+                }
+            }
+
+            setSystemMessage(
+                "All pump commands were accepted by the API."
+            );
+        } finally {
+            setSendingAll(false);
+        }
+    };
+
+    // Internal request used by Start All. It avoids the
+    // individual-button lock used by sendPumpCommand.
+    const sendPumpCommandInternal = async (pump, durationMs) => {
+        setCommands((previous) => ({
+            ...previous,
+            [pump.id]: {
+                status: "sending",
+                message: "Sending command...",
+            },
+        }));
+
+        setErrors((previous) => ({
+            ...previous,
+            [pump.id]: "",
+        }));
+
+        try {
+            const response = await fetch(
+                `${API_BASE_URL}${COMMAND_ENDPOINT}`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    credentials: "include",
+                    body: JSON.stringify({
+                        device_uid: DEVICE_UID,
+                        pump: pump.command,
+                        duration_ms: Number(durationMs),
+                    }),
+                }
+            );
+
+            const result = await response.json().catch(() => ({}));
+
+            if (!response.ok || result.success === false) {
+                throw new Error(
+                    result.message ||
+                    `HTTP ${response.status}`
+                );
+            }
+
+            setCommands((previous) => ({
+                ...previous,
+                [pump.id]: {
+                    status: "pending",
+                    message: "Awaiting ESP32 execution.",
+                    commandId: result.command?.id || result.id || null,
+                },
+            }));
+
+            return true;
+        } catch (error) {
+            setCommands((previous) => ({
+                ...previous,
+                [pump.id]: {
+                    status: "failed",
+                    message: error.message,
+                },
+            }));
+
+            setErrors((previous) => ({
+                ...previous,
+                [pump.id]: error.message,
+            }));
+
+            return false;
+        }
+    };
+
+    const activeCount = INITIAL_PUMPS.filter(
+        (pump) => commands[pump.id]?.status === "running"
+    ).length;
+
+    const pendingCount = INITIAL_PUMPS.filter(
+        (pump) => commands[pump.id]?.status === "pending" ||
+                  commands[pump.id]?.status === "sending"
+    ).length;
 
     return (
         <div className="pump-page">
-
             <Sidebar
                 isOpen={sidebarOpen}
                 setIsOpen={setSidebarOpen}
             />
 
             <main className="pump-main">
-
-                {/* =====================================================
-                    HEADER
-                ====================================================== */}
-
                 <header className="pump-header">
-
                     <div className="pump-header-left">
-
                         <button
                             className="pump-menu-button"
                             onClick={() => setSidebarOpen(true)}
+                            aria-label="Open navigation"
                         >
                             ☰
                         </button>
 
                         <div>
-
                             <h1>Pump Control</h1>
+                            <p>HydroControl IoT pump management</p>
                         </div>
-
                     </div>
 
                     <div className="pump-header-actions">
-
                         <div className="pump-header-status">
-                            <span></span>
-                            ESP32 ONLINE
+                            <span />
+                            ESP32 CONNECTION NOT VERIFIED
                         </div>
-
                     </div>
-
                 </header>
 
-
-                {/* =====================================================
-                    TOP STATS
-                ====================================================== */}
+                {systemMessage && (
+                    <div
+                        className="pump-system-message"
+                        role="status"
+                        aria-live="polite"
+                    >
+                        {systemMessage}
+                    </div>
+                )}
 
                 <section className="pump-stats">
-
-                    {/* ACTIVE PUMPS */}
-
                     <div className="pump-stat-card">
-
                         <div className="pump-card-header">
-
-                            <div className="pump-stat-icon">
-                                ⚙️
-                            </div>
-
+                            <div className="pump-stat-icon">⚙️</div>
                             <span className="pump-card-label">
-                                ACTIVE PUMPS
+                                CONFIRMED RUNNING
                             </span>
-
                         </div>
 
                         <div className="pump-stat-value">
-                            {pumps.filter((pump) => pump.status).length}
-                            <span> / {pumps.length}</span>
+                            {activeCount}
+                            <span> / {INITIAL_PUMPS.length}</span>
                         </div>
 
                         <div className="pump-mini-status">
-                            <span></span>
-                            Pumps currently running
+                            Hardware running status requires telemetry.
                         </div>
-
-                        <div className="pump-stat-footer">
-                            <span>System status</span>
-                            <strong>Operational</strong>
-                        </div>
-
                     </div>
 
-
-                    {/* TOTAL FLOW */}
-
                     <div className="pump-stat-card">
-
                         <div className="pump-card-header">
-
-                            <div className="pump-stat-icon">
-                                🌊
-                            </div>
-
+                            <div className="pump-stat-icon">📡</div>
                             <span className="pump-card-label">
-                                TOTAL FLOW
+                                PENDING COMMANDS
                             </span>
-
                         </div>
 
                         <div className="pump-stat-value">
-                            3.6
-                            <span> L/min</span>
+                            {pendingCount}
                         </div>
 
-                        <div className="pump-flow-bars">
-
-                            <span className="active"></span>
-                            <span className="active"></span>
-                            <span className="active"></span>
-                            <span></span>
-                            <span></span>
-
+                        <div className="pump-mini-status">
+                            Accepted or awaiting execution
                         </div>
-
-                        <div className="pump-stat-footer">
-                            <span>Current circulation</span>
-                            <strong>Stable</strong>
-                        </div>
-
                     </div>
 
-
-                    {/* POWER */}
-
                     <div className="pump-stat-card">
-
                         <div className="pump-card-header">
-
-                            <div className="pump-stat-icon">
-                                ⚡
-                            </div>
-
+                            <div className="pump-stat-icon">⏱️</div>
                             <span className="pump-card-label">
-                                POWER USAGE
+                                CYCLE DURATION
                             </span>
-
                         </div>
 
                         <div className="pump-stat-value">
-                            42
-                            <span> W</span>
+                            {(duration / 1000).toFixed(1)}
+                            <span> sec</span>
                         </div>
 
-                        <div className="power-progress">
-
-                            <div
-                                className="power-progress-fill"
-                                style={{ width: "42%" }}
-                            />
-
-                        </div>
-
-                        <div className="pump-stat-footer">
-                            <span>Today's average</span>
-                            <strong>38 W</strong>
-                        </div>
-
+                        <input
+                            type="range"
+                            min="1000"
+                            max={MAX_DURATION_MS}
+                            step="1000"
+                            value={duration}
+                            onChange={(event) =>
+                                setDuration(Number(event.target.value))
+                            }
+                            disabled={autoMode || sendingAll}
+                            aria-label="Pump cycle duration in seconds"
+                        />
                     </div>
 
-
-                    {/* CONTROL MODE */}
-
                     <div className="pump-stat-card">
-
                         <div className="pump-card-header">
-
-                            <div className="pump-stat-icon">
-                                🤖
-                            </div>
-
+                            <div className="pump-stat-icon">🤖</div>
                             <span className="pump-card-label">
                                 CONTROL MODE
                             </span>
-
                         </div>
 
                         <div className="mode-value">
@@ -257,555 +392,233 @@ function PumpControl() {
                         </div>
 
                         <div className="mode-switch">
-
                             <button
                                 className={autoMode ? "mode-active" : ""}
-                                onClick={() => setAutoMode(true)}
+                                onClick={() => {
+                                    setAutoMode(true);
+                                    setSystemMessage(
+                                        "Manual commands disabled. Automatic dosing logic must be implemented separately."
+                                    );
+                                }}
                             >
                                 AUTO
                             </button>
 
                             <button
                                 className={!autoMode ? "mode-active" : ""}
-                                onClick={() => setAutoMode(false)}
+                                onClick={() => {
+                                    setAutoMode(false);
+                                    setSystemMessage(
+                                        "Manual control enabled."
+                                    );
+                                }}
                             >
                                 MANUAL
                             </button>
-
                         </div>
-
-                        <div className="pump-stat-footer">
-                            <span>Current controller</span>
-                            <strong>
-                                {autoMode ? "Automatic" : "User Control"}
-                            </strong>
-                        </div>
-
                     </div>
-
                 </section>
 
-
-                {/* =====================================================
-                    MAIN CONTENT
-                ====================================================== */}
-
                 <section className="pump-content">
-
-                    {/* =================================================
-                        PUMP CONTROLLERS
-                    ================================================== */}
-
                     <div className="pump-panel controllers-panel">
-
                         <div className="pump-panel-header">
-
                             <div>
-
                                 <span className="pump-panel-label">
                                     DEVICE CONTROL
                                 </span>
-
-                                <h2>
-                                    Pump Controllers
-                                </h2>
-
+                                <h2>Pump Controllers</h2>
                             </div>
 
                             <div className="live-badge">
-                                <span></span>
-                                LIVE
+                                <span />
+                                COMMAND API
                             </div>
-
                         </div>
-
 
                         <div className="pump-list">
+                            {INITIAL_PUMPS.map((pump) => {
+                                const command = commands[pump.id];
+                                const status = command?.status || "idle";
+                                const busy =
+                                    status === "sending" || sendingAll;
 
-                            {pumps.map((pump) => (
+                                return (
+                                    <div
+                                        className={`pump-control-card ${
+                                            status === "running"
+                                                ? "pump-running"
+                                                : "pump-stopped"
+                                        }`}
+                                        key={pump.id}
+                                    >
+                                        <div className="pump-control-top">
+                                            <div className="pump-device-icon">
+                                                {pump.icon}
+                                            </div>
 
-                                <div
-                                    className={`pump-control-card ${
-                                        pump.status
-                                            ? "pump-running"
-                                            : "pump-stopped"
-                                    }`}
-                                    key={pump.id}
-                                >
+                                            <div className="pump-device-info">
+                                                <strong>{pump.name}</strong>
+                                                <span>{pump.type}</span>
+                                            </div>
 
-                                    <div className="pump-control-top">
-
-                                        <div className="pump-device-icon">
-                                            {pump.icon}
+                                            <div
+                                                className={`pump-status ${
+                                                    status === "running"
+                                                        ? "running"
+                                                        : "stopped"
+                                                }`}
+                                            >
+                                                <i />
+                                                {status === "idle"
+                                                    ? "Idle"
+                                                    : status === "sending"
+                                                    ? "Sending"
+                                                    : status === "pending"
+                                                    ? "Queued"
+                                                    : status === "running"
+                                                    ? "Running"
+                                                    : "Failed"}
+                                            </div>
                                         </div>
 
-                                        <div className="pump-device-info">
+                                        <div className="pump-control-divider" />
 
-                                            <strong>
-                                                {pump.name}
-                                            </strong>
+                                        <div className="pump-control-details">
+                                            <div className="pump-detail">
+                                                <span>GPIO</span>
+                                                <strong>{pump.gpio}</strong>
+                                            </div>
 
-                                            <span>
-                                                {pump.type}
-                                            </span>
+                                            <div className="pump-detail">
+                                                <span>FLOW</span>
+                                                <strong>{pump.flow}</strong>
+                                            </div>
 
+                                            <div className="pump-detail">
+                                                <span>CYCLE</span>
+                                                <strong>
+                                                    {(duration / 1000).toFixed(1)} sec
+                                                </strong>
+                                            </div>
                                         </div>
 
-                                        <div
-                                            className={
-                                                pump.status
-                                                    ? "pump-status running"
-                                                    : "pump-status stopped"
-                                            }
-                                        >
-                                            <i></i>
-                                            {pump.status
-                                                ? "Running"
-                                                : "Stopped"}
+                                        <div className="pump-control-actions">
+                                            <button
+                                                className="pump-toggle start"
+                                                onClick={() => runPump(pump)}
+                                                disabled={autoMode || busy}
+                                            >
+                                                {status === "sending"
+                                                    ? "Sending..."
+                                                    : status === "pending"
+                                                    ? "Queue Another Cycle"
+                                                    : status === "failed"
+                                                    ? "Retry Pump"
+                                                    : `▶ Run for ${(duration / 1000).toFixed(1)} sec`}
+                                            </button>
                                         </div>
 
+                                        {command?.message && (
+                                            <p role="status">
+                                                {command.message}
+                                            </p>
+                                        )}
+
+                                        {errors[pump.id] && (
+                                            <p role="alert" className="pump-error">
+                                                {errors[pump.id]}
+                                            </p>
+                                        )}
                                     </div>
-
-
-                                    <div className="pump-control-divider"></div>
-
-
-                                    <div className="pump-control-details">
-
-                                        <div className="pump-detail">
-
-                                            <span>
-                                                GPIO
-                                            </span>
-
-                                            <strong>
-                                                {pump.gpio}
-                                            </strong>
-
-                                        </div>
-
-                                        <div className="pump-detail">
-
-                                            <span>
-                                                FLOW
-                                            </span>
-
-                                            <strong>
-                                                {pump.flow}
-                                            </strong>
-
-                                        </div>
-
-                                        <div className="pump-detail">
-
-                                            <span>
-                                                RUNTIME
-                                            </span>
-
-                                            <strong>
-                                                {pump.runtime}
-                                            </strong>
-
-                                        </div>
-
-                                    </div>
-
-
-                                    <div className="pump-speed">
-
-                                        <div className="speed-header">
-
-                                            <span>
-                                                Pump Speed
-                                            </span>
-
-                                            <strong>
-                                                {pump.speed}%
-                                            </strong>
-
-                                        </div>
-
-                                        <input
-                                            type="range"
-                                            min="0"
-                                            max="100"
-                                            value={pump.speed}
-                                            onChange={(event) =>
-                                                updateSpeed(
-                                                    pump.id,
-                                                    event.target.value
-                                                )
-                                            }
-                                            disabled={autoMode}
-                                        />
-
-                                        <div className="speed-scale">
-
-                                            <span>0%</span>
-                                            <span>50%</span>
-                                            <span>100%</span>
-
-                                        </div>
-
-                                    </div>
-
-
-                                    <div className="pump-control-actions">
-
-                                        <button
-                                            className={
-                                                pump.status
-                                                    ? "pump-toggle stop"
-                                                    : "pump-toggle start"
-                                            }
-                                            onClick={() =>
-                                                togglePump(pump.id)
-                                            }
-                                            disabled={autoMode}
-                                        >
-                                            {pump.status
-                                                ? "■ Stop Pump"
-                                                : "▶ Start Pump"}
-                                        </button>
-
-                                        <button className="pump-settings">
-                                            ⚙ Settings
-                                        </button>
-
-                                    </div>
-
-                                </div>
-
-                            ))}
-
+                                );
+                            })}
                         </div>
-
                     </div>
 
-
-                    {/* =================================================
-                        QUICK CONTROL
-                    ================================================== */}
-
                     <div className="pump-panel quick-panel">
-
                         <div className="pump-panel-header">
-
                             <div>
-
                                 <span className="pump-panel-label">
                                     QUICK CONTROL
                                 </span>
-
-                                <h2>
-                                    System Actions
-                                </h2>
-
+                                <h2>System Actions</h2>
                             </div>
-
                         </div>
 
-
                         <div className="quick-actions">
+                            <button
+                                className="quick-action"
+                                disabled={autoMode || sendingAll}
+                                onClick={startAllPumps}
+                            >
+                                <span className="quick-icon">▶</span>
+                                <div>
+                                    <strong>
+                                        {sendingAll
+                                            ? "Queueing..."
+                                            : "Run All Pumps"}
+                                    </strong>
+                                    <small>
+                                        Queue a timed cycle for each pump
+                                    </small>
+                                </div>
+                            </button>
 
                             <button
                                 className="quick-action"
-                                disabled={autoMode}
-                                onClick={() =>
-                                    setPumps((items) =>
-                                        items.map((pump) => ({
-                                            ...pump,
-                                            status: true,
-                                            speed: pump.speed || 50
-                                        }))
-                                    )
-                                }
+                                onClick={() => {
+                                    setSystemMessage(
+                                        "Emergency stop is not available through the current firmware. Switch off the pump power supply or use a properly designed hardware cutoff in an actual emergency."
+                                    );
+                                }}
                             >
-
-                                <span className="quick-icon">
-                                    ▶
-                                </span>
-
+                                <span className="quick-icon">■</span>
                                 <div>
-                                    <strong>
-                                        Start All
-                                    </strong>
-
+                                    <strong>Emergency Stop Instructions</strong>
                                     <small>
-                                        Activate all pumps
+                                        Current firmware cannot interrupt a running cycle
                                     </small>
                                 </div>
-
                             </button>
-
-
-                            <button
-                                className="quick-action danger"
-                                disabled={autoMode}
-                                onClick={() =>
-                                    setPumps((items) =>
-                                        items.map((pump) => ({
-                                            ...pump,
-                                            status: false,
-                                            speed: 0
-                                        }))
-                                    )
-                                }
-                            >
-
-                                <span className="quick-icon">
-                                    ■
-                                </span>
-
-                                <div>
-                                    <strong>
-                                        Stop All
-                                    </strong>
-
-                                    <small>
-                                        Stop all pumps
-                                    </small>
-                                </div>
-
-                            </button>
-
-
-                            <button className="quick-action">
-
-                                <span className="quick-icon">
-                                    🔄
-                                </span>
-
-                                <div>
-                                    <strong>
-                                        Prime System
-                                    </strong>
-
-                                    <small>
-                                        Run pumps for 30 seconds
-                                    </small>
-                                </div>
-
-                            </button>
-
-
-                            <button className="quick-action">
-
-                                <span className="quick-icon">
-                                    ⏱️
-                                </span>
-
-                                <div>
-                                    <strong>
-                                        Schedule
-                                    </strong>
-
-                                    <small>
-                                        Configure pump timing
-                                    </small>
-                                </div>
-
-                            </button>
-
                         </div>
-
 
                         <div className="emergency-box">
-
-                            <div className="emergency-icon">
-                                ⚠️
-                            </div>
-
+                            <div className="emergency-icon">⚠️</div>
                             <div>
-
-                                <strong>
-                                    Emergency Stop
-                                </strong>
-
+                                <strong>Hardware safety</strong>
                                 <span>
-                                    Immediately stop every connected pump.
+                                    Use an independent, appropriately rated
+                                    power cutoff for emergencies.
                                 </span>
-
                             </div>
-
-                            <button
-                                onClick={() =>
-                                    setPumps((items) =>
-                                        items.map((pump) => ({
-                                            ...pump,
-                                            status: false,
-                                            speed: 0
-                                        }))
-                                    )
-                                }
-                            >
-                                EMERGENCY STOP
-                            </button>
-
                         </div>
-
                     </div>
-
                 </section>
 
-
-                {/* =====================================================
-                    SCHEDULE
-                ====================================================== */}
-
                 <section className="pump-panel schedule-panel">
-
                     <div className="pump-panel-header">
-
                         <div>
-
                             <span className="pump-panel-label">
                                 AUTOMATION
                             </span>
-
-                            <h2>
-                                Pump Schedule
-                            </h2>
-
+                            <h2>Pump Schedule</h2>
                         </div>
-
-                        <button className="refresh-button">
-                            + Add Schedule
-                        </button>
-
                     </div>
 
-
-                    <div className="schedule-table-wrapper">
-
-                        <table className="schedule-table">
-
-                            <thead>
-
-                                <tr>
-                                    <th>TIME</th>
-                                    <th>PUMP</th>
-                                    <th>DURATION</th>
-                                    <th>SPEED</th>
-                                    <th>STATUS</th>
-                                </tr>
-
-                            </thead>
-
-                            <tbody>
-
-                                <tr>
-
-                                    <td>
-                                        <strong>06:00 AM</strong>
-                                    </td>
-
-                                    <td>
-                                        Main Circulation Pump
-                                    </td>
-
-                                    <td>
-                                        30 min
-                                    </td>
-
-                                    <td>
-                                        75%
-                                    </td>
-
-                                    <td>
-                                        <span className="schedule-status">
-                                            <i></i>
-                                            Active
-                                        </span>
-                                    </td>
-
-                                </tr>
-
-                                <tr>
-
-                                    <td>
-                                        <strong>12:00 PM</strong>
-                                    </td>
-
-                                    <td>
-                                        Nutrient Pump A
-                                    </td>
-
-                                    <td>
-                                        5 min
-                                    </td>
-
-                                    <td>
-                                        60%
-                                    </td>
-
-                                    <td>
-                                        <span className="schedule-status">
-                                            <i></i>
-                                            Active
-                                        </span>
-                                    </td>
-
-                                </tr>
-
-                                <tr>
-
-                                    <td>
-                                        <strong>06:00 PM</strong>
-                                    </td>
-
-                                    <td>
-                                        Main Circulation Pump
-                                    </td>
-
-                                    <td>
-                                        30 min
-                                    </td>
-
-                                    <td>
-                                        75%
-                                    </td>
-
-                                    <td>
-                                        <span className="schedule-status">
-                                            <i></i>
-                                            Active
-                                        </span>
-                                    </td>
-
-                                </tr>
-
-                            </tbody>
-
-                        </table>
-
-                    </div>
-
+                    <p>
+                        Scheduled dosing is not configured in this component.
+                        Implement schedules on the backend or ESP32 with
+                        dosing limits and safety checks before enabling
+                        automatic operation.
+                    </p>
                 </section>
 
-
-                {/* =====================================================
-                    FOOTER
-                ====================================================== */}
-
                 <footer className="pump-footer">
-
-                    <span>
-                        © 2026 HydroControl
-                    </span>
-
-                    <span>
-                        Pump Control System • ESP32
-                    </span>
-
-                    <span>
-                        System Status: Online
-                    </span>
-
+                    <span>© 2026 HydroControl</span>
+                    <span>Pump Control System • ESP32</span>
+                    <span>API status must be verified</span>
                 </footer>
-
             </main>
-
         </div>
     );
 }
