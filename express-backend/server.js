@@ -23,33 +23,48 @@ if (process.env.NODE_ENV === "production") {
     app.set("trust proxy", 1);
 }
 
-const allowedOrigins = [
+const allowedOrigins = new Set([
     "http://localhost:5173",
     "http://localhost:3000",
     "https://hydrocontrol.site",
     "https://www.hydrocontrol.site"
-];
+]);
 
 const corsOptions = {
     origin(origin, callback) {
-        // Requests without Origin include many device/server requests.
-        if (!origin || allowedOrigins.includes(origin)) {
+        if (!origin || allowedOrigins.has(origin)) {
             return callback(null, true);
         }
 
+        console.error(`Blocked CORS origin: ${origin}`);
         return callback(new Error("Origin not allowed by CORS"));
     },
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+
+    credentials: true,
+
+    methods: [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+        "OPTIONS"
+    ],
+
     allowedHeaders: [
         "Content-Type",
         "Authorization",
         "x-device-token"
     ],
-    credentials: true,
+
     optionsSuccessStatus: 204
 };
 
 app.use(cors(corsOptions));
+
+// Handle CORS preflight requests before API routes.
+app.options(/.*/, cors(corsOptions));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
