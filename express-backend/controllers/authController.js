@@ -105,29 +105,23 @@ const login = async (req, res) => {
                 id: user.id,
                 name: user.name,
                 email: user.email,
-                role: user.role
+                role: user.role,
             };
 
-            req.session.save((sessionError) => {
-                if (sessionError) {
-                    console.error("SESSION SAVE ERROR:", sessionError);
+            req.session.save((error) => {
+                if (error) {
+                    console.error("Session save failed:", error);
 
                     return res.status(500).json({
                         success: false,
-                        message: "Could not establish login session."
+                        message: "Failed to create login session.",
                     });
                 }
 
                 return res.status(200).json({
                     success: true,
                     message: "Login successful.",
-                    user: {
-                        id: user.id,
-                        name: user.name,
-                        email: user.email,
-                        role: user.role,
-                        last_login: previousLastLogin
-                    }
+                    user: req.session.user,
                 });
             });
         });
