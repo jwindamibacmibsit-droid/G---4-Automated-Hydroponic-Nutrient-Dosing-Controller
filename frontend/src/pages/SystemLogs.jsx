@@ -1,4 +1,3 @@
-
 import {
     useCallback,
     useEffect,
@@ -48,21 +47,41 @@ const formatTime = (value) => {
     });
 };
 
+const formatDate = (value) => {
+    if (!value) return "--";
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) return "--";
+
+    return date.toLocaleDateString([], {
+        year: "numeric",
+        month: "short",
+        day: "2-digit"
+    });
+};
+
 function SystemLogs() {
     const [sidebarOpen, setSidebarOpen] = useState(false);
+
     const [logs, setLogs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+
     const [error, setError] = useState("");
     const [apiOnline, setApiOnline] = useState(null);
+
     const [lastUpdated, setLastUpdated] = useState(null);
     const [lastLogin, setLastLogin] = useState(null);
+
     const [availableLevels, setAvailableLevels] = useState([]);
     const [availableCategories, setAvailableCategories] = useState([]);
+
     const [searchTerm, setSearchTerm] = useState("");
     const [severityFilter, setSeverityFilter] = useState("All");
     const [categoryFilter, setCategoryFilter] = useState("All");
 
+    // Read the currently stored user.
     const loadCurrentUser = useCallback(() => {
         try {
             const storedUser =
@@ -75,13 +94,15 @@ function SystemLogs() {
             }
 
             const user = JSON.parse(storedUser);
+
             setLastLogin(user.last_login || null);
-        } catch (error) {
-            console.error("Could not read current user:", error);
+        } catch (err) {
+            console.error("Could not read current user:", err);
             setLastLogin(null);
         }
     }, []);
 
+    // Fetch logs from the Express backend.
     const fetchLogs = useCallback(async ({ silent = false } = {}) => {
         if (silent) {
             setRefreshing(true);
@@ -101,9 +122,9 @@ function SystemLogs() {
                 }
             );
 
-            const text = await response.text();
+            const responseText = await response.text();
 
-            if (!text.trim()) {
+            if (!responseText.trim()) {
                 throw new Error(
                     `The server returned an empty response (${response.status}).`
                 );
@@ -112,14 +133,17 @@ function SystemLogs() {
             let result;
 
             try {
-                result = JSON.parse(text);
+                result = JSON.parse(responseText);
             } catch {
-                throw new Error("The server returned invalid JSON.");
+                throw new Error(
+                    "The server returned invalid JSON. Check your API URL and Express route."
+                );
             }
 
-            if (!response.ok || !result.success) {
+            if (!response.ok || result.success !== true) {
                 throw new Error(
-                    result.message || `Request failed (${response.status}).`
+                    result.message ||
+                    `Request failed with status ${response.status}.`
                 );
             }
 
@@ -127,11 +151,19 @@ function SystemLogs() {
                 ? result.data
                 : [];
 
+            // Sort newest first, even if the API response is unordered.
+            receivedLogs.sort((a, b) => {
+                const dateA = new Date(a.timestamp || 0).getTime();
+                const dateB = new Date(b.timestamp || 0).getTime();
+
+                return dateB - dateA;
+            });
+
             setLogs(receivedLogs);
 
             setAvailableLevels(
                 Array.isArray(result.filters?.levels)
-                    ? result.filters.levels
+                    ? result.filters.levels.map(normalizeLevel)
                     : []
             );
 
@@ -148,17 +180,20 @@ function SystemLogs() {
             console.error("Failed to fetch system logs:", err);
 
             setApiOnline(false);
+
             setError(
-                err.message || "Unable to connect to the system logs API."
+                err.message ||
+                "Unable to connect to the system logs API."
             );
 
-            // Keep previously loaded records visible on refresh failure.
+            // Preserve previously loaded logs when a refresh fails.
         } finally {
             setLoading(false);
             setRefreshing(false);
         }
     }, []);
 
+    // Initial fetch and automatic refresh every 30 seconds.
     useEffect(() => {
         loadCurrentUser();
         fetchLogs();
@@ -170,6 +205,7 @@ function SystemLogs() {
         return () => window.clearInterval(intervalId);
     }, [fetchLogs, loadCurrentUser]);
 
+    // Search and filter records in the browser.
     const filteredLogs = useMemo(() => {
         const search = searchTerm.trim().toLowerCase();
 
@@ -182,13 +218,19 @@ function SystemLogs() {
                 log.device,
                 log.device_uid,
                 log.user_email,
-                log.device_id
+                log.user_name,
+                log.user_role,
+                log.device_id,
+                log.device_status,
+                log.firmware_version
             ];
 
             const matchesSearch =
                 !search ||
                 searchableFields.some((field) =>
-                    String(field ?? "").toLowerCase().includes(search)
+                    String(field ?? "")
+                        .toLowerCase()
+                        .includes(search)
                 );
 
             const matchesLevel =
@@ -200,10 +242,20 @@ function SystemLogs() {
                 String(log.category || "SYSTEM").toUpperCase() ===
                     categoryFilter.toUpperCase();
 
-            return matchesSearch && matchesLevel && matchesCategory;
+            return (
+                matchesSearch &&
+                matchesLevel &&
+                matchesCategory
+            );
         });
-    }, [logs, searchTerm, severityFilter, categoryFilter]);
+    }, [
+        logs,
+        searchTerm,
+        severityFilter,
+        categoryFilter
+    ]);
 
+    // Statistics for the currently loaded records.
     const statistics = useMemo(() => {
         const result = {
             total: logs.length,
@@ -216,7 +268,10 @@ function SystemLogs() {
         logs.forEach((log) => {
             const level = normalizeLevel(log.level);
 
-            if (Object.prototype.hasOwnProperty.call(result, level)) {
+            if (
+                Object.prototype.hasOwnProperty.call(result, level) &&
+                level !== "total"
+            ) {
                 result[level] += 1;
             } else {
                 result.INFO += 1;
@@ -226,43 +281,49 @@ function SystemLogs() {
         return result;
     }, [logs]);
 
-    const latestEvent = logs.length
-        ? logs.reduce((latest, current) => {
-            if (!latest) return current;
-
-            return new Date(current.timestamp || 0) >
-                new Date(latest.timestamp || 0)
-                ? current
-                : latest;
-        }, null)
-        : null;
+    const latestEvent = logs.length > 0 ? logs[0] : null;
 
     const handleRefresh = () => {
         loadCurrentUser();
         fetchLogs();
     };
 
+    // Export the currently filtered records to CSV.
     const exportCSV = () => {
         if (!filteredLogs.length) return;
 
         const columns = [
+            ["ID", "id"],
             ["Timestamp", "timestamp"],
             ["Level", "level"],
             ["Category", "category"],
             ["Event", "event"],
+            ["Details", "details"],
             ["Device", "device"],
             ["Device UID", "device_uid"],
+            ["Device Status", "device_status"],
+            ["Firmware Version", "firmware_version"],
+            ["User Name", "user_name"],
             ["User Email", "user_email"],
-            ["Details", "details"]
+            ["User Role", "user_role"]
         ];
 
         const escapeCSV = (value) => {
             const text = String(value ?? "");
-            return `"${text.replace(/"/g, '""')}"`;
+
+            // Prevent spreadsheet formula injection.
+            const safeText = /^[\s]*[=+\-@]/.test(text)
+                ? `'${text}`
+                : text;
+
+            return `"${safeText.replace(/"/g, '""')}"`;
         };
 
         const csv = [
-            columns.map(([label]) => escapeCSV(label)).join(","),
+            columns
+                .map(([label]) => escapeCSV(label))
+                .join(","),
+
             ...filteredLogs.map((log) =>
                 columns
                     .map(([, key]) => escapeCSV(log[key]))
@@ -278,13 +339,15 @@ function SystemLogs() {
         const anchor = document.createElement("a");
 
         anchor.href = url;
-        anchor.download = `hydrocontrol-system-logs-${new Date()
-            .toISOString()
-            .slice(0, 10)}.csv`;
+        anchor.download =
+            `hydrocontrol-system-logs-${new Date()
+                .toISOString()
+                .slice(0, 10)}.csv`;
 
         document.body.appendChild(anchor);
         anchor.click();
         anchor.remove();
+
         URL.revokeObjectURL(url);
     };
 
@@ -294,6 +357,26 @@ function SystemLogs() {
         setCategoryFilter("All");
     };
 
+    const categoryOptions = useMemo(() => {
+        return [
+            ...new Set([
+                ...availableCategories,
+                ...logs
+                    .map((log) => log.category)
+                    .filter(Boolean)
+            ])
+        ].sort();
+    }, [availableCategories, logs]);
+
+    const levelOptions = useMemo(() => {
+        return [
+            ...new Set([
+                ...LEVELS,
+                ...availableLevels
+            ])
+        ].sort();
+    }, [availableLevels]);
+
     return (
         <div className="logs-page">
             <Sidebar
@@ -302,10 +385,12 @@ function SystemLogs() {
             />
 
             <main className="logs-main">
+                {/* Page header */}
                 <header className="logs-header">
                     <div className="logs-heading">
                         <button
                             className="logs-menu-button"
+                            type="button"
                             onClick={() => setSidebarOpen(true)}
                             aria-label="Open navigation"
                         >
@@ -320,8 +405,9 @@ function SystemLogs() {
                             <h1>System Logs</h1>
 
                             <p>
-                                Review recorded events, user activity,
-                                device operations, and system warnings.
+                                Review system logs, sensor activity,
+                                pump operations, user activity,
+                                and device events.
                             </p>
                         </div>
                     </div>
@@ -337,6 +423,7 @@ function SystemLogs() {
                         role="status"
                     >
                         <span className="status-dot" />
+
                         {apiOnline === true
                             ? "API CONNECTED"
                             : apiOnline === false
@@ -345,6 +432,7 @@ function SystemLogs() {
                     </div>
                 </header>
 
+                {/* API error */}
                 {error && (
                     <div className="logs-alert" role="alert">
                         <span className="logs-alert-icon">!</span>
@@ -352,9 +440,10 @@ function SystemLogs() {
                         <div>
                             <strong>Could not refresh logs</strong>
                             <p>{error}</p>
+
                             {logs.length > 0 && (
                                 <small>
-                                    Showing previously loaded records.
+                                    Previously loaded records remain visible.
                                 </small>
                             )}
                         </div>
@@ -369,7 +458,11 @@ function SystemLogs() {
                     </div>
                 )}
 
-                <section className="logs-stats">
+                {/* Statistics */}
+                <section
+                    className="logs-stats"
+                    aria-label="Log statistics"
+                >
                     <article className="logs-stat-card">
                         <div className="logs-stat-top">
                             <span className="logs-stat-icon">≡</span>
@@ -417,7 +510,7 @@ function SystemLogs() {
                         </strong>
 
                         <span className="logs-stat-note">
-                            Events to review
+                            Events that need review
                         </span>
                     </article>
 
@@ -439,13 +532,16 @@ function SystemLogs() {
                     </article>
                 </section>
 
+                {/* Main content */}
                 <section className="logs-content">
+                    {/* Information panel */}
                     <aside className="logs-panel logs-info-panel">
                         <div className="logs-panel-heading">
                             <div>
                                 <span className="logs-eyebrow">
                                     OVERVIEW
                                 </span>
+
                                 <h2>Log Information</h2>
                             </div>
 
@@ -479,10 +575,12 @@ function SystemLogs() {
                             </div>
 
                             <div className="logs-info-row">
-                                <span>Last log event</span>
+                                <span>Latest event</span>
                                 <strong>
                                     {latestEvent
-                                        ? formatDateTime(latestEvent.timestamp)
+                                        ? formatDateTime(
+                                            latestEvent.timestamp
+                                        )
                                         : "No events"}
                                 </strong>
                             </div>
@@ -498,20 +596,24 @@ function SystemLogs() {
                         </div>
 
                         <div className="logs-info-footnote">
-                            API connectivity does not confirm that the
-                            ESP32 controller itself is online.
+                            API connectivity does not confirm that
+                            the ESP32 device itself is online.
                         </div>
                     </aside>
 
+                    {/* Event history */}
                     <section className="logs-panel logs-events-panel">
                         <div className="logs-panel-heading logs-events-heading">
                             <div>
                                 <span className="logs-eyebrow">
                                     AUDIT TRAIL
                                 </span>
+
                                 <h2>Event History</h2>
+
                                 <p>
-                                    Search, filter, and export recorded activity.
+                                    Search, filter, review, and export
+                                    recorded activity.
                                 </p>
                             </div>
 
@@ -532,25 +634,32 @@ function SystemLogs() {
                                     disabled={loading || refreshing}
                                 >
                                     <span
-                                        className={refreshing ? "logs-spin" : ""}
+                                        className={
+                                            refreshing ? "logs-spin" : ""
+                                        }
                                     >
                                         ↻
                                     </span>
-                                    {refreshing ? "Refreshing" : "Refresh"}
+
+                                    {refreshing
+                                        ? "Refreshing"
+                                        : "Refresh"}
                                 </button>
                             </div>
                         </div>
 
+                        {/* Search and filters */}
                         <div className="logs-toolbar">
                             <label className="logs-search">
                                 <span aria-hidden="true">⌕</span>
+
                                 <input
                                     type="search"
                                     value={searchTerm}
                                     onChange={(event) =>
                                         setSearchTerm(event.target.value)
                                     }
-                                    placeholder="Search events, device, user..."
+                                    placeholder="Search events, devices, users..."
                                     aria-label="Search system logs"
                                 />
                             </label>
@@ -563,10 +672,8 @@ function SystemLogs() {
                                 aria-label="Filter by severity"
                             >
                                 <option value="All">All levels</option>
-                                {[...new Set([
-                                    ...LEVELS,
-                                    ...availableLevels.map(normalizeLevel)
-                                ])].map((level) => (
+
+                                {levelOptions.map((level) => (
                                     <option key={level} value={level}>
                                         {level}
                                     </option>
@@ -581,8 +688,12 @@ function SystemLogs() {
                                 aria-label="Filter by category"
                             >
                                 <option value="All">All categories</option>
-                                {availableCategories.map((category) => (
-                                    <option key={category} value={category}>
+
+                                {categoryOptions.map((category) => (
+                                    <option
+                                        key={category}
+                                        value={category}
+                                    >
                                         {category}
                                     </option>
                                 ))}
@@ -601,14 +712,19 @@ function SystemLogs() {
                             )}
                         </div>
 
+                        {/* Results summary */}
                         <div className="logs-results-summary">
                             <span>
-                                <strong>{filteredLogs.length}</strong>
+                                <strong>
+                                    {filteredLogs.length.toLocaleString()}
+                                </strong>
                                 {" "}matching events
                             </span>
+
                             <span>Newest events first</span>
                         </div>
 
+                        {/* Logs table */}
                         <div className="logs-table-wrapper">
                             <table className="logs-table">
                                 <thead>
@@ -625,48 +741,72 @@ function SystemLogs() {
                                 <tbody>
                                     {loading && logs.length === 0 && (
                                         <tr>
-                                            <td colSpan={6} className="logs-table-message">
+                                            <td
+                                                colSpan={6}
+                                                className="logs-table-message"
+                                            >
                                                 <span className="logs-loader" />
                                                 Loading system logs...
                                             </td>
                                         </tr>
                                     )}
 
-                                    {!loading && logs.length === 0 && !error && (
-                                        <tr>
-                                            <td colSpan={6} className="logs-table-message">
-                                                <div className="logs-empty-icon">≡</div>
-                                                <strong>No system events yet</strong>
-                                                <span>
-                                                    New records will appear here
-                                                    when your backend writes them.
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    )}
+                                    {!loading &&
+                                        logs.length === 0 &&
+                                        !error && (
+                                            <tr>
+                                                <td
+                                                    colSpan={6}
+                                                    className="logs-table-message"
+                                                >
+                                                    <div className="logs-empty-icon">
+                                                        ≡
+                                                    </div>
 
-                                    {filteredLogs.map((log) => {
+                                                    <strong>
+                                                        No system events yet
+                                                    </strong>
+
+                                                    <span>
+                                                        New records will appear
+                                                        when your backend saves
+                                                        them to system_logs.
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        )}
+
+                                    {filteredLogs.map((log, index) => {
                                         const level = normalizeLevel(log.level);
 
                                         return (
-                                            <tr key={log.id}>
+                                            <tr
+                                                key={
+                                                    log.id ??
+                                                    `${log.timestamp}-${index}`
+                                                }
+                                            >
                                                 <td>
                                                     <div className="logs-time-cell">
                                                         <strong>
-                                                            {formatTime(log.timestamp)}
+                                                            {formatTime(
+                                                                log.timestamp
+                                                            )}
                                                         </strong>
+
                                                         <span>
-                                                            {log.timestamp
-                                                                ? new Date(log.timestamp)
-                                                                    .toLocaleDateString()
-                                                                : "--"}
+                                                            {formatDate(
+                                                                log.timestamp
+                                                            )}
                                                         </span>
                                                     </div>
                                                 </td>
 
                                                 <td>
                                                     <span
-                                                        className={`log-level ${level.toLowerCase()}`}
+                                                        className={
+                                                            `log-level ${level.toLowerCase()}`
+                                                        }
                                                     >
                                                         <i>
                                                             {level === "SUCCESS"
@@ -677,6 +817,7 @@ function SystemLogs() {
                                                                         ? "×"
                                                                         : "i"}
                                                         </i>
+
                                                         {level}
                                                     </span>
                                                 </td>
@@ -689,26 +830,49 @@ function SystemLogs() {
 
                                                 <td className="logs-event-cell">
                                                     <strong>
-                                                        {log.event || "Unknown event"}
+                                                        {log.event ||
+                                                            "Unknown event"}
                                                     </strong>
+
                                                     <p>
-                                                        {log.details || "No additional details"}
+                                                        {log.details ||
+                                                            "No additional details"}
                                                     </p>
                                                 </td>
 
                                                 <td>
                                                     <div className="logs-device-cell">
                                                         <strong>
-                                                            {log.device || "System"}
+                                                            {log.device ||
+                                                                "System"}
                                                         </strong>
+
                                                         {log.device_uid && (
-                                                            <span>{log.device_uid}</span>
+                                                            <span>
+                                                                {log.device_uid}
+                                                            </span>
+                                                        )}
+
+                                                        {log.device_status && (
+                                                            <span>
+                                                                Status:{" "}
+                                                                {log.device_status}
+                                                            </span>
+                                                        )}
+
+                                                        {log.firmware_version && (
+                                                            <span>
+                                                                Firmware:{" "}
+                                                                {log.firmware_version}
+                                                            </span>
                                                         )}
                                                     </div>
                                                 </td>
 
                                                 <td className="logs-user-cell">
-                                                    {log.user_email || "System"}
+                                                    {log.user_email ||
+                                                        log.user_name ||
+                                                        "System"}
                                                 </td>
                                             </tr>
                                         );
@@ -716,14 +880,18 @@ function SystemLogs() {
                                 </tbody>
                             </table>
 
+                            {/* No matching results */}
                             {!loading &&
                                 filteredLogs.length === 0 &&
                                 logs.length > 0 && (
                                     <div className="logs-filter-empty">
                                         <strong>No matching events</strong>
+
                                         <span>
-                                            Try another search or clear your filters.
+                                            Try another search or clear
+                                            your filters.
                                         </span>
+
                                         <button
                                             type="button"
                                             onClick={clearFilters}
@@ -734,14 +902,16 @@ function SystemLogs() {
                                 )}
                         </div>
 
+                        {/* Table footer */}
                         <footer className="logs-table-footer">
                             <span>
-                                Displaying {filteredLogs.length} of {logs.length} loaded records
+                                Displaying {filteredLogs.length} of{" "}
+                                {logs.length} loaded records
                             </span>
 
                             <span>
                                 {refreshing
-                                    ? "Updating…"
+                                    ? "Updating..."
                                     : lastUpdated
                                         ? `Updated ${formatTime(lastUpdated)}`
                                         : "Not yet updated"}
@@ -750,9 +920,14 @@ function SystemLogs() {
                     </section>
                 </section>
 
+                {/* Page footer */}
                 <footer className="logs-footer">
                     <span>© 2026 HydroControl</span>
-                    <span>System Audit &amp; Event Monitoring</span>
+
+                    <span>
+                        System Audit &amp; Event Monitoring
+                    </span>
+
                     <span>
                         {apiOnline === true
                             ? "API connected"
