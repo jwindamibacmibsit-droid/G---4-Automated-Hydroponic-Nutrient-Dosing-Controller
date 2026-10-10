@@ -8,8 +8,12 @@ import {
 import Sidebar from "../components/Navbar";
 import "../css/system_logs.css";
 
-const API_URL = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
-const LOGS_URL = `${API_URL}/api/system/logs`;
+const API_URL = (
+    import.meta.env.VITE_API_URL ||
+    "https://api.hydrocontrol.site"
+).replace(/\/$/, "");
+
+const LOGS_URL = `${API_URL}/api/system/events`;
 
 const LEVELS = ["INFO", "SUCCESS", "WARNING", "ERROR"];
 
@@ -148,7 +152,26 @@ function SystemLogs() {
             }
 
             const receivedLogs = Array.isArray(result.data)
-                ? result.data
+                ? result.data.map((reading) => ({
+                    ...reading,
+
+                    // Ensure the existing table has displayable values.
+                    level: reading.level || "INFO",
+                    category: reading.category || "SENSOR",
+                    event: reading.event || "Sensor reading recorded",
+
+                    details: reading.details || [
+                        `pH: ${reading.ph_value ?? "N/A"}`,
+                        `Water level: ${reading.water_level ?? "N/A"}`,
+                        `Nutrient A: ${reading.nutrient_a ?? "N/A"}`,
+                        `Nutrient B: ${reading.nutrient_b ?? "N/A"}`,
+                        `Water distance: ${reading.water_distance_cm ?? "N/A"} cm`,
+                        `Water height: ${reading.water_level_cm ?? "N/A"} cm`,
+                        `Water percentage: ${
+                            reading.water_percentage ?? "N/A"
+                        }%`
+                    ].join(" | ")
+                }))
                 : [];
 
             // Sort newest first, even if the API response is unordered.

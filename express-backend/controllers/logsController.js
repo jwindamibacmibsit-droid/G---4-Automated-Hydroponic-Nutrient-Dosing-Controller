@@ -12,46 +12,33 @@ const supabase = require("../config/supabase");
 
 const getEventHistory = async (req, res) => {
     try {
-        const parsedLimit = Number.parseInt(req.query.limit, 10);
-        const parsedPage = Number.parseInt(req.query.page, 10);
+        const limit = Math.min(
+            Math.max(parseInt(req.query.limit, 10) || 20, 1),
+            500
+        );
 
-        const limit =
-            Number.isFinite(parsedLimit) && parsedLimit > 0
-                ? Math.min(parsedLimit, 500)
-                : 500;
-
-        const page =
-            Number.isFinite(parsedPage) && parsedPage > 0
-                ? parsedPage
-                : 1;
+        const page = Math.max(
+            parseInt(req.query.page, 10) || 1,
+            1
+        );
 
         const from = (page - 1) * limit;
         const to = from + limit - 1;
 
-        const search =
-            typeof req.query.search === "string"
-                ? req.query.search.trim().toLowerCase()
-                : "";
-
-        const {
-            data: readings,
-            error,
-            count
-        } = await supabase
+        // Fetch sensor readings from Supabase.
+        const { data: readings, error, count } = await supabase
             .from("sensor_reading")
             .select(
-                `
-                    id,
-                    device_id,
-                    ph_value,
-                    water_level,
-                    nutrient_a,
-                    nutrient_b,
-                    timestamp,
-                    water_distance_cm,
-                    water_level_cm,
-                    water_percentage
-                `,
+                `id,
+                 device_id,
+                 ph_value,
+                 water_level,
+                 nutrient_a,
+                 nutrient_b,
+                 timestamp,
+                 water_distance_cm,
+                 water_level_cm,
+                 water_percentage`,
                 { count: "exact" }
             )
             .order("timestamp", { ascending: false })
@@ -59,43 +46,37 @@ const getEventHistory = async (req, res) => {
 
         if (error) {
             console.error("SENSOR EVENT HISTORY ERROR:", error);
-
             return res.status(500).json({
                 success: false,
-                message: "Failed to retrieve sensor event history.",
+                message: "Failed to fetch sensor readings.",
                 error: error.message
             });
         }
 
         const records = readings || [];
 
+        // Fetch associated device details.
         const deviceIds = [
             ...new Set(
                 records
-                    .map((reading) => reading.device_id)
-                    .filter((id) => id != null)
+                    .map(row => row.device_id)
+                    .filter(id => id != null)
             )
         ];
 
         let devices = [];
 
         if (deviceIds.length > 0) {
-            const {
-                data,
-                error: deviceError
-            } = await supabase
+            const { data, error: deviceError } = await supabase
                 .from("devices")
-                .select(
-                    "id, device_name, device_uid, status, firmware_version"
-                )
+                .select("id, device_name, device_uid, status")
                 .in("id", deviceIds);
 
             if (deviceError) {
-                console.error("EVENT DEVICE LOOKUP ERROR:", deviceError);
-
+                console.error("DEVICE LOOKUP ERROR:", deviceError);
                 return res.status(500).json({
                     success: false,
-                    message: "Failed to retrieve device information.",
+                    message: "Failed to fetch device details.",
                     error: deviceError.message
                 });
             }
@@ -104,108 +85,67 @@ const getEventHistory = async (req, res) => {
         }
 
         const deviceMap = new Map(
-            devices.map((device) => [
-                String(device.id),
-                device
-            ])
+            devices.map(device => [String(device.id), device])
         );
 
-        const formattedEvents = records.map((reading) => {
-            const device = deviceMap.get(
-                String(reading.device_id)
-            );
-
-            const details = [
-                `pH: ${reading.ph_value ?? "N/A"}`,
-                `Water level: ${reading.water_level ?? "N/A"}`,
-                `Nutrient A: ${reading.nutrient_a ?? "N/A"}`,
-                `Nutrient B: ${reading.nutrient_b ?? "N/A"}`,
-                `Distance: ${reading.water_distance_cm ?? "N/A"} cm`,
-                `Water height: ${reading.water_level_cm ?? "N/A"} cm`,
-                `Water percentage: ${reading.water_percentage ?? "N/A"}%`
-            ].join(" | ");
+        // Format rows for the Event History frontend.
+        const events = records.map(row => {
+            const device = deviceMap.get(String(row.device_id));
 
             return {
-                id: reading.id,
-                device_id: reading.device_id,
-                timestamp: reading.timestamp,
-
+                id: row.id,
+                timestamp: row.timestamp,
                 level: "INFO",
                 category: "SENSOR",
                 event: "Sensor reading recorded",
-                details,
 
-                ph_value: reading.ph_value,
-                water_level: reading.water_level,
-                nutrient_a: reading.nutrient_a,
-                nutrient_b: reading.nutrient_b,
-                water_distance_cm: reading.water_distance_cm,
-                water_level_cm: reading.water_level_cm,
-                water_percentage: reading.water_percentage,
+                details: [
+                    `pH: ${row.ph_value ?? "N/A"}`,
+                    `Water level: ${row.water_level ?? "N/A"}`,
+                    `Nutrient A: ${row.nutrient_a ?? "N/A"}`,
+                    `Nutrient B: ${row.nutrient_b ?? "N/A"}`,
+                    `Distance: ${row.water_distance_cm ?? "N/A"} cm`,
+                    `Water height: ${row.water_level_cm ?? "N/A"} cm`,
+                    `Water percentage: ${row.water_percentage ?? "N/A"}%`
+                ].join(" | "),
 
+                device_id: row.device_id,
                 device:
                     device?.device_name ||
                     device?.device_uid ||
-                    `Device #${reading.device_id}`,
-
+                    `Device #${row.device_id}`,
                 device_uid: device?.device_uid || null,
                 device_status: device?.status || null,
-                firmware_version: device?.firmware_version || null,
+
+                ph_value: row.ph_value,
+                water_level: row.water_level,
+                nutrient_a: row.nutrient_a,
+                nutrient_b: row.nutrient_b,
+                water_distance_cm: row.water_distance_cm,
+                water_level_cm: row.water_level_cm,
+                water_percentage: row.water_percentage,
 
                 user_id: null,
                 user_name: null,
-                user_email: null,
-                user_role: null
+                user_email: null
             };
         });
-
-        // Search the returned sensor history.
-        // For reliable pagination, use server-side search if the
-        // history grows beyond the current page.
-        const filteredEvents = search
-            ? formattedEvents.filter((event) => {
-                const searchable = [
-                    event.event,
-                    event.details,
-                    event.category,
-                    event.device,
-                    event.device_uid,
-                    event.device_id
-                ];
-
-                return searchable.some((value) =>
-                    String(value ?? "")
-                        .toLowerCase()
-                        .includes(search)
-                );
-            })
-            : formattedEvents;
 
         return res.status(200).json({
             success: true,
             message: "Sensor event history retrieved successfully.",
-            count: filteredEvents.length,
-            total: count ?? records.length,
-            pagination: {
-                page,
-                limit,
-                totalPages: Math.ceil(
-                    (count ?? records.length) / limit
-                )
-            },
-            data: filteredEvents,
-            filters: {
-                levels: ["INFO"],
-                categories: ["SENSOR"]
-            }
+            count: events.length,
+            total: count ?? 0,
+            page,
+            limit,
+            data: events
         });
     } catch (error) {
         console.error("GET EVENT HISTORY ERROR:", error);
 
         return res.status(500).json({
             success: false,
-            message: "Server error while retrieving event history.",
-            error: error.message
+            message: "Server error while fetching sensor events."
         });
     }
 };
