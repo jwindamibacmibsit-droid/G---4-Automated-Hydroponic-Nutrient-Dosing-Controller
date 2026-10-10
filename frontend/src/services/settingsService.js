@@ -4,30 +4,74 @@ const API_BASE_URL = (
 ).replace(/\/$/, "");
 
 async function request(endpoint = "", options = {}) {
-    const response = await fetch(
-        `${API_BASE_URL}/api/settings${endpoint}`,
-        {
+    const url = `${API_BASE_URL}/api/settings${endpoint}`;
+
+    let response;
+
+    try {
+        response = await fetch(url, {
             ...options,
             headers: {
+                Accept: "application/json",
                 "Content-Type": "application/json",
                 ...options.headers,
             },
-        }
-    );
-
-    const result = await response.json();
-
-    if (!response.ok || !result.success) {
+        });
+    } catch (error) {
         throw new Error(
-            result.message || "Settings request failed."
+            `Cannot connect to the backend at ${url}. Check your API URL and server.`
         );
     }
 
-    return result.data;
+    // Read the response as text first to handle empty responses safely.
+    const responseText = await response.text();
+
+    let result = null;
+
+    if (responseText.trim()) {
+        try {
+            result = JSON.parse(responseText);
+        } catch {
+            throw new Error(
+                `Backend returned invalid JSON (HTTP ${response.status}). ` +
+                `Response: ${responseText.slice(0, 250)}`
+            );
+        }
+    }
+
+    if (!response.ok) {
+        throw new Error(
+            result?.message ||
+            result?.error ||
+            `Settings API failed with HTTP ${response.status}. ` +
+            (responseText.trim()
+                ? responseText.slice(0, 200)
+                : "The server returned an empty response.")
+        );
+    }
+
+    if (!result) {
+        throw new Error(
+            `Settings API returned an empty response (HTTP ${response.status}). ` +
+            "Check your backend controller."
+        );
+    }
+
+    if (result.success === false) {
+        throw new Error(
+            result.message || "The settings request failed."
+        );
+    }
+
+    // Supports APIs returning either { success: true, data: ... }
+    // or a settings object directly.
+    return result.data ?? result;
 }
 
 export function getSettings() {
-    return request();
+    return request("", {
+        method: "GET",
+    });
 }
 
 export function updateSettings(settings) {
