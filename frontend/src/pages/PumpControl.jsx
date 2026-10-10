@@ -107,7 +107,6 @@ function PumpControl() {
                     headers: {
                         "Content-Type": "application/json",
                     },
-                    credentials: "include",
                     body: JSON.stringify({
                         device_uid: DEVICE_UID,
                         pump: pump.command,
@@ -217,7 +216,7 @@ function PumpControl() {
         }));
 
         try {
-            const response = await fetch(
+           const response = await fetch(
                 `${API_BASE_URL}${COMMAND_ENDPOINT}`,
                 {
                     method: "POST",
@@ -225,7 +224,6 @@ function PumpControl() {
                     headers: {
                         "Content-Type": "application/json",
                     },
-                    credentials: "include",
                     body: JSON.stringify({
                         device_uid: DEVICE_UID,
                         pump: pump.command,
