@@ -111,6 +111,24 @@
     font-size: 10px;
 }
 
+.sidebar-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.sidebar-icon svg,
+.sidebar-logo-icon svg {
+    display: block;
+}
+
+.sidebar-logo-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
 
 /* SECTION */
 

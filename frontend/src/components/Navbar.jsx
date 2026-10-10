@@ -1,4 +1,15 @@
 import { NavLink, useNavigate } from "react-router-dom";
+import {
+    LayoutDashboard,
+    Droplets,
+    ClipboardList,
+    Settings,
+    Info,
+    LogOut,
+    Leaf,
+    X,
+} from "lucide-react";
+
 import "../css/navbar.css";
 
 function Navbar({ isOpen, setIsOpen }) {
@@ -8,65 +19,57 @@ function Navbar({ isOpen, setIsOpen }) {
         {
             name: "Dashboard",
             path: "/dashboard",
-            icon: "⌂"
+            icon: LayoutDashboard,
         },
         {
             name: "Pump Control",
             path: "/pump-control",
-            icon: "⚙️"
+            icon: Droplets,
         },
         {
             name: "System Logs",
             path: "/logs",
-            icon: "📋"
-        }
+            icon: ClipboardList,
+        },
     ];
 
-    // =====================================================
-    // LOGOUT
-    // =====================================================
     const handleLogout = () => {
-        // Remove saved login information
         localStorage.removeItem("hydrocontrol_user");
         sessionStorage.removeItem("hydrocontrol_user");
 
-        // Close sidebar
         if (setIsOpen) {
             setIsOpen(false);
         }
 
-        // Redirect to login page
-        navigate("/", {
-            replace: true
-        });
+        navigate("/", { replace: true });
+    };
+
+    const closeSidebar = () => {
+        if (setIsOpen) {
+            setIsOpen(false);
+        }
     };
 
     return (
         <>
-            {/* =================================================
-                OVERLAY
-            ================================================== */}
+            {/* Overlay */}
             {isOpen && (
                 <div
                     className="sidebar-overlay"
-                    onClick={() => setIsOpen(false)}
+                    onClick={closeSidebar}
                 />
             )}
 
-            {/* =================================================
-                SIDEBAR
-            ================================================== */}
+            {/* Sidebar */}
             <aside
                 className={`sidebar ${
                     isOpen ? "sidebar-open" : ""
                 }`}
             >
-                {/* =================================================
-                    LOGO
-                ================================================== */}
+                {/* Logo */}
                 <div className="sidebar-logo">
                     <div className="sidebar-logo-icon">
-                        🌱
+                        <Leaf size={25} strokeWidth={2} />
                     </div>
 
                     <div className="sidebar-logo-text">
@@ -75,45 +78,49 @@ function Navbar({ isOpen, setIsOpen }) {
                     </div>
 
                     <button
+                        type="button"
                         className="sidebar-close"
-                        onClick={() => setIsOpen(false)}
+                        onClick={closeSidebar}
                         aria-label="Close sidebar"
                     >
-                        ×
+                        <X size={21} />
                     </button>
                 </div>
 
-                {/* =================================================
-                    NAVIGATION
-                ================================================== */}
+                {/* Main Navigation */}
                 <div className="sidebar-section-title">
                     MAIN MENU
                 </div>
 
                 <nav className="sidebar-menu">
-                    {menuItems.map((item) => (
-                        <NavLink
-                            key={item.path}
-                            to={item.path}
-                            className={({ isActive }) =>
-                                `sidebar-link ${
-                                    isActive ? "active" : ""
-                                }`
-                            }
-                            onClick={() => setIsOpen(false)}
-                        >
-                            <span className="sidebar-icon">
-                                {item.icon}
-                            </span>
+                    {menuItems.map((item) => {
+                        const Icon = item.icon;
 
-                            <span>{item.name}</span>
-                        </NavLink>
-                    ))}
+                        return (
+                            <NavLink
+                                key={item.path}
+                                to={item.path}
+                                className={({ isActive }) =>
+                                    `sidebar-link ${
+                                        isActive ? "active" : ""
+                                    }`
+                                }
+                                onClick={closeSidebar}
+                            >
+                                <span className="sidebar-icon">
+                                    <Icon
+                                        size={20}
+                                        strokeWidth={1.8}
+                                    />
+                                </span>
+
+                                <span>{item.name}</span>
+                            </NavLink>
+                        );
+                    })}
                 </nav>
 
-                {/* =================================================
-                    SYSTEM
-                ================================================== */}
+                {/* System Navigation */}
                 <div className="sidebar-bottom">
                     <div className="sidebar-section-title">
                         SYSTEM
@@ -126,13 +133,16 @@ function Navbar({ isOpen, setIsOpen }) {
                                 isActive ? "active" : ""
                             }`
                         }
-                        onClick={() => setIsOpen(false)}
+                        onClick={closeSidebar}
                     >
                         <span className="sidebar-icon">
-                            ⚙
+                            <Settings
+                                size={20}
+                                strokeWidth={1.8}
+                            />
                         </span>
 
-                        Settings
+                        <span>Settings</span>
                     </NavLink>
 
                     <NavLink
@@ -142,25 +152,29 @@ function Navbar({ isOpen, setIsOpen }) {
                                 isActive ? "active" : ""
                             }`
                         }
-                        onClick={() => setIsOpen(false)}
+                        onClick={closeSidebar}
                     >
                         <span className="sidebar-icon">
-                            ⓘ
+                            <Info
+                                size={20}
+                                strokeWidth={1.8}
+                            />
                         </span>
 
-                        About System
+                        <span>About System</span>
                     </NavLink>
 
-                    {/* =================================================
-                        LOGOUT
-                    ================================================== */}
+                    {/* Logout */}
                     <button
                         type="button"
                         className="sidebar-logout"
                         onClick={handleLogout}
                     >
                         <span className="sidebar-icon">
-                            ↪
+                            <LogOut
+                                size={20}
+                                strokeWidth={1.8}
+                            />
                         </span>
 
                         <span>Logout</span>
