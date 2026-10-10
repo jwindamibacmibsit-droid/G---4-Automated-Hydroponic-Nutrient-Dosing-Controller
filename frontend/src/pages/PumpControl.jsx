@@ -5,7 +5,7 @@ import "../css/pump-control.css";
 
 const API_BASE_URL =
     import.meta.env.VITE_API_BASE_URL ||
-    "https://api.hydrocontrol.site";
+    "".replace(/\/$/, "");
 
 const COMMAND_ENDPOINT = "/api/esp/pumps/commands";
 const DEVICE_UID = "ESP32-HYDRO-001";

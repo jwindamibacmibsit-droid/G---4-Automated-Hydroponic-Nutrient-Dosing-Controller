@@ -41,36 +41,16 @@ function validDevice(req, res, next) {
 // ========================================
 // 2. WEBSITE AUTHENTICATION
 // ========================================
-async function requireUser(req, res, next) {
-    try {
-        const authorization = req.get("authorization") || "";
-
-        const token = authorization.startsWith("Bearer ")
-            ? authorization.slice(7)
-            : "";
-
-        if (!token) {
-            return res.status(401).json({
-                success: false,
-                message: "Authentication required",
-            });
-        }
-
-        const { data, error } =
-            await supabase.auth.getUser(token);
-
-        if (error || !data.user) {
-            return res.status(401).json({
-                success: false,
-                message: "Invalid or expired session",
-            });
-        }
-
-        req.user = data.user;
-        next();
-    } catch (error) {
-        next(error);
+function requireUser(req, res, next) {
+    if (!req.session || !req.session.user || !req.session.user.id) {
+        return res.status(401).json({
+            success: false,
+            message: "Authentication required. Please log in again."
+        });
     }
+
+    req.user = req.session.user;
+    return next();
 }
 
 // ========================================

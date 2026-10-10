@@ -78,7 +78,7 @@ function Login({ onLogin }) {
                 `${API_URL}/api/auth/login`,
                 {
                     method: "POST",
-
+                    credentials: "include",
                     headers: {
                         "Content-Type": "application/json"
                     },

@@ -4,33 +4,26 @@ const bcrypt = require("bcrypt");
 // =====================================================
 // LOGIN
 // =====================================================
-
 const login = async (req, res) => {
-    const {
-        email,
-        password
-    } = req.body;
-
     try {
-        // =================================================
-        // VALIDATION
-        // =================================================
+        const { email, password } = req.body || {};
 
-        if (!email || !password) {
+        if (
+            typeof email !== "string" ||
+            typeof password !== "string" ||
+            !email.trim() ||
+            !password
+        ) {
             return res.status(400).json({
                 success: false,
                 message: "Email and password are required."
             });
         }
 
-        // =================================================
-        // FIND USER
-        // =================================================
+        const normalizedEmail = email.trim().toLowerCase();
 
-        const {
-            data: user,
-            error
-        } = await supabase
+        // Find administrator.
+        const { data: user, error } = await supabase
             .from("admin")
             .select(`
                 id,
@@ -40,20 +33,17 @@ const login = async (req, res) => {
                 role,
                 last_login
             `)
-            .eq("email", email)
+            .eq("email", normalizedEmail)
             .maybeSingle();
 
         if (error) {
             console.error("SUPABASE LOGIN ERROR:", error);
+
             return res.status(500).json({
                 success: false,
                 message: "Database error."
             });
         }
-
-        // =================================================
-        // USER NOT FOUND
-        // =================================================
 
         if (!user) {
             return res.status(401).json({
@@ -62,12 +52,9 @@ const login = async (req, res) => {
             });
         }
 
-        // =================================================
-        // PASSWORD CHECK
-        // =================================================
-
         if (!user.password_hash) {
-            console.error("PASSWORD IS EMPTY FOR:", user.email);
+            console.error("Password hash is missing for:", user.email);
+
             return res.status(500).json({
                 success: false,
                 message: "User password is not configured."
@@ -86,22 +73,10 @@ const login = async (req, res) => {
             });
         }
 
-        // =================================================
-        // SAVE PREVIOUS LOGIN
-        // =================================================
-
         const previousLastLogin = user.last_login;
-
-        // =================================================
-        // CURRENT LOGIN TIME
-        // =================================================
-
         const currentLogin = new Date().toISOString();
 
-        // =================================================
-        // UPDATE USERS.LAST_LOGIN
-        // =================================================
-
+        // Update login timestamp.
         const { error: updateError } = await supabase
             .from("admin")
             .update({
@@ -114,10 +89,15 @@ const login = async (req, res) => {
             console.error("LAST LOGIN UPDATE ERROR:", updateError);
         }
 
-        // =================================================
-        // CREATE SYSTEM EVENT LOG
-        // =================================================
+        // Save the authenticated user in the Express session.
+        req.session.user = {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role
+        };
 
+        // Record the login in system_logs.
         const { error: logError } = await supabase
             .from("system_logs")
             .insert({
@@ -131,36 +111,33 @@ const login = async (req, res) => {
             });
 
         if (logError) {
+            // Logging failure should not invalidate valid credentials.
             console.error("LOGIN SYSTEM LOG ERROR:", logError);
         }
 
-        // =================================================
-        // ESTABLISH SERVER SESSION (FIX FOR 401 ERROR)
-        // =================================================
+        // Ensure the session is saved before returning success.
+        req.session.save((sessionError) => {
+            if (sessionError) {
+                console.error("SESSION SAVE ERROR:", sessionError);
 
-        req.session.user = {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            role: user.role
-        };
-
-        // =================================================
-        // LOGIN RESPONSE
-        // =================================================
-
-        return res.status(200).json({
-            success: true,
-            message: "Login successful.",
-            user: {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-                last_login: previousLastLogin
+                return res.status(500).json({
+                    success: false,
+                    message: "Could not establish login session."
+                });
             }
-        });
 
+            return res.status(200).json({
+                success: true,
+                message: "Login successful.",
+                user: {
+                    id: user.id,
+                    name: user.name,
+                    email: user.email,
+                    role: user.role,
+                    last_login: previousLastLogin
+                }
+            });
+        });
     } catch (error) {
         console.error("LOGIN ERROR:", error);
 
