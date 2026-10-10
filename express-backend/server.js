@@ -12,6 +12,7 @@ const healthRoutes = require("./routes/healthRoutes");
 const sensorRoutes = require("./routes/sensorRoutes");
 const systemLogsRoutes = require("./routes/logRoutes");
 const espRoutes = require("./routes/espRoutes");
+const settingsRoutes = require("./routes/settingsRoutes");
 
 const app = express();
 
@@ -133,6 +134,7 @@ app.use("/api/sensors", sensorRoutes);
 app.use("/api/health", healthRoutes);
 app.use("/api/system", systemLogsRoutes);
 app.use("/api/esp", espRoutes);
+app.use("/api/settings", settingsRoutes);
 
 // =====================================================
 // HEALTH CHECK
