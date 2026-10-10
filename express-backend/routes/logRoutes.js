@@ -4,7 +4,7 @@ const router = express.Router();
 const {
     getSystemLogs,
     getEventHistory
-} = require("../controllers/logController");
+} = require("../controllers/logsController");
 
 router.get("/events", getEventHistory);
 router.get("/logs", getSystemLogs);

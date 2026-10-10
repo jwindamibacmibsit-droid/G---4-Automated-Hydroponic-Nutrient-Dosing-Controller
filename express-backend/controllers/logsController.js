@@ -243,12 +243,15 @@ const getSystemLogs = async (req, res) => {
         const { data: logs, error } = await query;
 
         if (error) {
-            console.error("SYSTEM LOGS QUERY ERROR:", error);
+            console.error("SENSOR EVENT HISTORY ERROR:", JSON.stringify(error, null, 2));
 
             return res.status(500).json({
                 success: false,
-                message: "Failed to load system logs.",
-                error: error.message
+                message: "Failed to fetch sensor readings.",
+                error: error.message,
+                code: error.code || null,
+                details: error.details || null,
+                hint: error.hint || null
             });
         }
 
@@ -396,12 +399,15 @@ const getSystemLogs = async (req, res) => {
             }
         });
     } catch (error) {
-        console.error("GET SYSTEM LOGS ERROR:", error);
+        console.error("GET EVENT HISTORY ERROR:", error);
 
         return res.status(500).json({
             success: false,
-            message: "Server error while loading system logs.",
-            error: error.message
+            message: "Server error while fetching sensor events.",
+            error: error.message,
+            code: error.code || null,
+            details: error.details || null,
+            hint: error.hint || null
         });
     }
 };

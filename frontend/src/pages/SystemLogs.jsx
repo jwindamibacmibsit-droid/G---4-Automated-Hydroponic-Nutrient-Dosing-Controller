@@ -14,7 +14,6 @@ const API_URL = (
 ).replace(/\/$/, "");
 
 const LOGS_URL = `${API_URL}/api/system/events`;
-
 const LEVELS = ["INFO", "SUCCESS", "WARNING", "ERROR"];
 
 const normalizeLevel = (value) =>
