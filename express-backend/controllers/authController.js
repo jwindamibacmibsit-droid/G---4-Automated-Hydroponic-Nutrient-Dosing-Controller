@@ -89,13 +89,49 @@ const login = async (req, res) => {
             console.error("LAST LOGIN UPDATE ERROR:", updateError);
         }
 
-        // Save the authenticated user in the Express session.
-        req.session.user = {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            role: user.role
-        };
+
+        // Regenerate the session after successful authentication.
+        req.session.regenerate((regenerateError) => {
+            if (regenerateError) {
+                console.error("SESSION REGENERATION ERROR:", regenerateError);
+
+                return res.status(500).json({
+                    success: false,
+                    message: "Could not establish login session."
+                });
+            }
+
+            req.session.user = {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role
+            };
+
+            req.session.save((sessionError) => {
+                if (sessionError) {
+                    console.error("SESSION SAVE ERROR:", sessionError);
+
+                    return res.status(500).json({
+                        success: false,
+                        message: "Could not establish login session."
+                    });
+                }
+
+                return res.status(200).json({
+                    success: true,
+                    message: "Login successful.",
+                    user: {
+                        id: user.id,
+                        name: user.name,
+                        email: user.email,
+                        role: user.role,
+                        last_login: previousLastLogin
+                    }
+                });
+            });
+        });
+
 
         // Record the login in system_logs.
         const { error: logError } = await supabase
