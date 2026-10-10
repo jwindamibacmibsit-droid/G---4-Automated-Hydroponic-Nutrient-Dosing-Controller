@@ -49,7 +49,7 @@ function requireUser(req, res, next) {
         });
     }
 
-    req.user = req.session.user;
+    req.user = req.session.user.id;
     return next();
 }
 
