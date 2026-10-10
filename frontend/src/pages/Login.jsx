@@ -65,11 +65,6 @@ function Login({ onLogin }) {
         setLoading(true);
 
         try {
-            console.log(
-                "API URL:",
-                API_URL
-            );
-
             // ==========================================
             // SEND LOGIN REQUEST
             // ==========================================
@@ -89,17 +84,6 @@ function Login({ onLogin }) {
                     })
                 }
             );
-
-            console.log(
-                "HTTP STATUS:",
-                response.status
-            );
-
-            console.log(
-                "STATUS TEXT:",
-                response.statusText
-            );
-
             // ==========================================
             // READ RESPONSE
             // ==========================================
@@ -130,11 +114,6 @@ function Login({ onLogin }) {
                 );
             }
 
-            console.log(
-                "LOGIN RESPONSE:",
-                data
-            );
-
             // ==========================================
             // LOGIN FAILED
             // ==========================================
@@ -156,17 +135,6 @@ function Login({ onLogin }) {
             // ==========================================
 
             const user = data.user;
-
-            console.log(
-                "LOGGED IN USER:",
-                user
-            );
-
-            console.log(
-                "PREVIOUS LAST LOGIN:",
-                user.last_login
-            );
-
             // ==========================================
             // UPDATE APP USER
             // ==========================================
