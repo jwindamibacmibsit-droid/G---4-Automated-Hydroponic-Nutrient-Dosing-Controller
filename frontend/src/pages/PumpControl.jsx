@@ -3,9 +3,9 @@ import { useState } from "react";
 import Sidebar from "../components/Navbar";
 import "../css/pump-control.css";
 
-const API_BASE_URL =
-    import.meta.env.VITE_API_BASE_URL ||
-    "".replace(/\/$/, "");
+const API_BASE_URL = (
+    import.meta.env.VITE_API_URL || ""
+).replace(/\/+$/, "");
 
 const COMMAND_ENDPOINT = "/api/esp/pumps/commands";
 const DEVICE_UID = "ESP32-HYDRO-001";
@@ -129,7 +129,11 @@ function PumpControl() {
                 [pump.id]: {
                     status: "pending",
                     message: "Command accepted; awaiting ESP32.",
-                    commandId: result.command?.id || result.id || null,
+                    commandId:
+                        result.data?.id ??
+                        result.command?.id ??
+                        result.id ??
+                        null,
                 },
             }));
 
@@ -241,8 +245,12 @@ function PumpControl() {
                 ...previous,
                 [pump.id]: {
                     status: "pending",
-                    message: "Awaiting ESP32 execution.",
-                    commandId: result.command?.id || result.id || null,
+                    message: "Command accepted; awaiting ESP32.",
+                    commandId:
+                        result.data?.id ??
+                        result.command?.id ??
+                        result.id ??
+                        null,
                 },
             }));
 
