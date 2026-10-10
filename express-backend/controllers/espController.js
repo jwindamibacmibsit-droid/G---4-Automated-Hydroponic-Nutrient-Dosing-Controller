@@ -75,6 +75,10 @@ async function findDevice() {
 // pH is OPTIONAL.
 // Water readings can be saved without pH.
 // ========================================
+// ========================================
+// RECEIVE ESP32 SENSOR DATA
+// POST /api/esp/sensors
+// ========================================
 async function receiveSensorData(req, res, next) {
     try {
         const body = req.body || {};
@@ -86,38 +90,27 @@ async function receiveSensorData(req, res, next) {
             water_percentage = null,
         } = body;
 
-        // Accept either "ph" or "ph_value".
-        // Missing, null, or empty pH means unavailable.
         const rawPH =
             body.ph !== undefined ? body.ph : body.ph_value;
 
-        const phMissing =
-            rawPH === undefined ||
-            rawPH === null ||
-            rawPH === "";
+        const validPH =
+            typeof rawPH === "number" &&
+            Number.isFinite(rawPH) &&
+            rawPH >= 0 &&
+            rawPH <= 14;
 
-        let ph = null;
+        const validWater =
+            typeof water_distance_cm === "number" &&
+            Number.isFinite(water_distance_cm) &&
+            water_distance_cm >= 0 &&
+            typeof water_level_cm === "number" &&
+            Number.isFinite(water_level_cm) &&
+            water_level_cm >= 0 &&
+            typeof water_percentage === "number" &&
+            Number.isFinite(water_percentage) &&
+            water_percentage >= 0 &&
+            water_percentage <= 100;
 
-        // Validate pH only when it was provided.
-        if (!phMissing) {
-            if (
-                typeof rawPH !== "number" ||
-                !Number.isFinite(rawPH) ||
-                rawPH < 0 ||
-                rawPH > 14
-            ) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "Invalid pH value. Expected a number from 0 to 14.",
-                    received_ph: rawPH,
-                });
-            }
-
-            ph = rawPH;
-        }
-
-        // Validate device identity.
         if (device_uid !== DEVICE_UID) {
             return res.status(400).json({
                 success: false,
@@ -125,41 +118,6 @@ async function receiveSensorData(req, res, next) {
             });
         }
 
-        // Validate optional water readings.
-        const optionalReadings = {
-            water_distance_cm,
-            water_level_cm,
-            water_percentage,
-        };
-
-        for (const [key, value] of Object.entries(optionalReadings)) {
-            if (
-                value !== null &&
-                (
-                    typeof value !== "number" ||
-                    !Number.isFinite(value) ||
-                    value < 0
-                )
-            ) {
-                return res.status(400).json({
-                    success: false,
-                    message: `Invalid sensor value: ${key}`,
-                });
-            }
-        }
-
-        if (
-            water_percentage !== null &&
-            water_percentage > 100
-        ) {
-            return res.status(400).json({
-                success: false,
-                message:
-                    "Water percentage must be between 0 and 100",
-            });
-        }
-
-        // Find registered device.
         const { data: device, error: deviceError } =
             await supabase
                 .from("devices")
@@ -172,29 +130,27 @@ async function receiveSensorData(req, res, next) {
         if (!device) {
             return res.status(404).json({
                 success: false,
-                message:
-                    "Device is not registered in Supabase",
+                message: "Device is not registered",
             });
         }
 
         const now = new Date().toISOString();
 
-        // Save readings.
-        // Database column ph_value must allow NULL.
+        // Save the readings that are actually valid.
         const readingPayload = {
             device_id: device.id,
-            water_distance_cm,
-            water_level_cm,
-            water_percentage,
+            ph_value: validPH ? rawPH : null,
+            water_distance_cm: validWater
+                ? water_distance_cm
+                : null,
+            water_level_cm: validWater
+                ? water_level_cm
+                : null,
+            water_percentage: validWater
+                ? water_percentage
+                : null,
             timestamp: now,
         };
-
-        // Include pH only when valid.
-        // Omitting it lets PostgreSQL use NULL if the
-        // column is nullable and has no conflicting default.
-        if (ph !== null) {
-            readingPayload.ph_value = ph;
-        }
 
         const { data: reading, error: readingError } =
             await supabase
@@ -205,22 +161,28 @@ async function receiveSensorData(req, res, next) {
 
         if (readingError) throw readingError;
 
-        // Mark device online after successful insert.
-        const { error: heartbeatError } = await supabase
+        // Both required sensors must be valid for Online.
+        const deviceStatus =
+            validPH && validWater ? "online" : "offline";
+
+        const { error: statusError } = await supabase
             .from("devices")
             .update({
-                status: "online",
+                status: deviceStatus,
                 last_seen: now,
             })
             .eq("id", device.id);
 
-        if (heartbeatError) throw heartbeatError;
+        if (statusError) throw statusError;
 
         return res.status(201).json({
             success: true,
-            message: phMissing
-                ? "Water sensor data saved successfully; pH unavailable"
-                : "Sensor data saved successfully",
+            message: "Sensor data processed",
+            device_status: deviceStatus,
+            sensors: {
+                ph: validPH ? "online" : "offline",
+                ultrasonic: validWater ? "online" : "offline",
+            },
             data: reading,
         });
     } catch (error) {
