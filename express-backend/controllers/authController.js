@@ -1,12 +1,13 @@
+
 const supabase = require("../config/supabase");
 const bcrypt = require("bcrypt");
 
 // =====================================================
-// LOGIN
+// LOGIN — POST /api/auth/login
 // =====================================================
 const login = async (req, res) => {
     try {
-        const { email, password } = req.body || {};
+        const { email, password, rememberMe = false } = req.body || {};
 
         if (
             typeof email !== "string" ||
@@ -22,7 +23,7 @@ const login = async (req, res) => {
 
         const normalizedEmail = email.trim().toLowerCase();
 
-        // Find administrator.
+        // 1. Find administrator.
         const { data: user, error } = await supabase
             .from("admin")
             .select(`
@@ -45,22 +46,14 @@ const login = async (req, res) => {
             });
         }
 
-        if (!user) {
+        if (!user || !user.password_hash) {
             return res.status(401).json({
                 success: false,
                 message: "Invalid email or password."
             });
         }
 
-        if (!user.password_hash) {
-            console.error("Password hash is missing for:", user.email);
-
-            return res.status(500).json({
-                success: false,
-                message: "User password is not configured."
-            });
-        }
-
+        // 2. Verify password.
         const passwordMatch = await bcrypt.compare(
             password,
             user.password_hash
@@ -76,7 +69,7 @@ const login = async (req, res) => {
         const previousLastLogin = user.last_login;
         const currentLogin = new Date().toISOString();
 
-        // Update login timestamp.
+        // 3. Update last login.
         const { error: updateError } = await supabase
             .from("admin")
             .update({
@@ -89,66 +82,10 @@ const login = async (req, res) => {
             console.error("LAST LOGIN UPDATE ERROR:", updateError);
         }
 
-
-        // Regenerate the session after successful authentication.
-        req.session.regenerate((regenerateError) => {
-            if (regenerateError) {
-                console.error("SESSION REGENERATION ERROR:", regenerateError);
-
-                return res.status(500).json({
-                    success: false,
-                    message: "Could not establish login session."
-                });
-            }
-
-            req.session.user = {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-            };
-
-            req.session.save((error) => {
-                if (error) {
-                    console.error("Session save failed:", error);
-
-                    return res.status(500).json({
-                        success: false,
-                        message: "Failed to create login session.",
-                    });
-                }
-
-                return res.status(200).json({
-                    success: true,
-                    message: "Login successful.",
-                    user: req.session.user,
-                });
-            });
-        });
-
-
-        // Record the login in system_logs.
-        const { error: logError } = await supabase
-            .from("system_logs")
-            .insert({
-                user_id: user.id,
-                timestamp: currentLogin,
-                level: "SUCCESS",
-                category: "SYSTEM",
-                event: `${user.name} logged in successfully`,
-                device: "Web Admin Portal",
-                details: `Successful administrator login for ${user.email}`
-            });
-
-        if (logError) {
-            // Logging failure should not invalidate valid credentials.
-            console.error("LOGIN SYSTEM LOG ERROR:", logError);
-        }
-
-        // Ensure the session is saved before returning success.
-        req.session.save((sessionError) => {
+        // 4. Regenerate session ID after authentication.
+        req.session.regenerate(async (sessionError) => {
             if (sessionError) {
-                console.error("SESSION SAVE ERROR:", sessionError);
+                console.error("SESSION REGENERATION ERROR:", sessionError);
 
                 return res.status(500).json({
                     success: false,
@@ -156,28 +93,152 @@ const login = async (req, res) => {
                 });
             }
 
-            return res.status(200).json({
-                success: true,
-                message: "Login successful.",
-                user: {
+            try {
+                // Never store the password or password hash in a session.
+                req.session.user = {
                     id: user.id,
                     name: user.name,
                     email: user.email,
-                    role: user.role,
-                    last_login: previousLastLogin
+                    role: user.role
+                };
+
+                // Remember me: persistent cookie for 7 days.
+                // Otherwise: browser-session cookie.
+                if (rememberMe === true) {
+                    req.session.cookie.maxAge =
+                        7 * 24 * 60 * 60 * 1000;
+                } else {
+                    req.session.cookie.expires = false;
                 }
-            });
+
+                // 5. Save session BEFORE responding.
+                req.session.save(async (saveError) => {
+                    if (saveError) {
+                        console.error("SESSION SAVE ERROR:", saveError);
+
+                        return res.status(500).json({
+                            success: false,
+                            message: "Failed to create login session."
+                        });
+                    }
+
+                    // 6. Log successful login.
+                    // A logging failure must not invalidate the session.
+                    const { error: logError } = await supabase
+                        .from("system_logs")
+                        .insert({
+                            user_id: user.id,
+                            timestamp: currentLogin,
+                            level: "SUCCESS",
+                            category: "SYSTEM",
+                            event: `${user.name} logged in successfully`,
+                            device: "Web Admin Portal",
+                            details: `Successful administrator login for ${user.email}`
+                        });
+
+                    if (logError) {
+                        console.error("LOGIN SYSTEM LOG ERROR:", logError);
+                    }
+
+                    // 7. Send ONE response only.
+                    return res.status(200).json({
+                        success: true,
+                        authenticated: true,
+                        message: "Login successful.",
+                        user: {
+                            ...req.session.user,
+                            last_login: currentLogin
+                        }
+                    });
+                });
+            } catch (error) {
+                console.error("SESSION SETUP ERROR:", error);
+
+                if (!res.headersSent) {
+                    return res.status(500).json({
+                        success: false,
+                        message: "Could not establish login session."
+                    });
+                }
+            }
         });
     } catch (error) {
         console.error("LOGIN ERROR:", error);
 
-        return res.status(500).json({
-            success: false,
-            message: "Server error."
-        });
+        if (!res.headersSent) {
+            return res.status(500).json({
+                success: false,
+                message: "Server error."
+            });
+        }
     }
 };
 
+// =====================================================
+// GET CURRENT SESSION
+// GET /api/auth/session
+// =====================================================
+const getSession = (req, res) => {
+    if (!req.session?.user?.id) {
+        return res.status(401).json({
+            success: false,
+            authenticated: false,
+            message: "Authentication required."
+        });
+    }
+
+    return res.status(200).json({
+        success: true,
+        authenticated: true,
+        user: req.session.user
+    });
+};
+
+// =====================================================
+// LOGOUT — POST /api/auth/logout
+// =====================================================
+const logout = (req, res) => {
+    if (!req.session) {
+        res.clearCookie("hydrocontrol.sid", {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+            path: "/"
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Logged out successfully."
+        });
+    }
+
+    req.session.destroy((error) => {
+        if (error) {
+            console.error("SESSION DESTROY ERROR:", error);
+
+            return res.status(500).json({
+                success: false,
+                message: "Could not log out."
+            });
+        }
+
+        res.clearCookie("hydrocontrol.sid", {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "lax",
+            path: "/"
+        });
+
+        return res.status(200).json({
+            success: true,
+            authenticated: false,
+            message: "Logged out successfully."
+        });
+    });
+};
+
 module.exports = {
-    login
+    login,
+    getSession,
+    logout
 };

@@ -85,12 +85,14 @@ app.use(
         secret: process.env.SESSION_SECRET,
         resave: false,
         saveUninitialized: false,
-        proxy: true,
+        proxy: isProduction,
+
         cookie: {
             httpOnly: true,
-            secure: true,
+            secure: isProduction,
             sameSite: "lax",
-            maxAge: 24 * 60 * 60 * 1000
+            path: "/",
+            maxAge: undefined
         }
     })
 );
