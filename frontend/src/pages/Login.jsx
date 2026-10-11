@@ -2,7 +2,9 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../css/login.css";
 
-const API_URL = import.meta.env.VITE_API_URL;
+const API_URL = (
+    import.meta.env.VITE_API_URL || ""
+).replace(/\/+$/, "");
 
 function Login({ onLogin }) {
     const navigate = useNavigate();
@@ -42,153 +44,102 @@ function Login({ onLogin }) {
     // ==========================================
     // LOGIN
     // ==========================================
+const handleSubmit = async (e) => {
+    e.preventDefault();
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+    if (!formData.email.trim() || !formData.password) {
+        setError("Please enter your email and password.");
+        return;
+    }
 
-        // ==========================================
-        // VALIDATION
-        // ==========================================
+    setError("");
+    setLoading(true);
+
+    try {
+        // 1. Authenticate with the backend.
+        const response = await fetch(
+            `${API_URL}/api/auth/login`,
+            {
+                method: "POST",
+                credentials: "include",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    email: formData.email.trim(),
+                    password: formData.password
+                })
+            }
+        );
+
+        const data = await response.json().catch(() => ({}));
+
+        if (!response.ok || data.success !== true) {
+            throw new Error(
+                data.message || `Login failed (${response.status}).`
+            );
+        }
+
+        // 2. Confirm that the browser can use the new session.
+        const sessionResponse = await fetch(
+            `${API_URL}/api/auth/session`,
+            {
+                method: "GET",
+                credentials: "include",
+                cache: "no-store"
+            }
+        );
+
+        const sessionData = await sessionResponse
+            .json()
+            .catch(() => ({}));
 
         if (
-            !formData.email ||
-            !formData.password
+            !sessionResponse.ok ||
+            sessionData.authenticated !== true
         ) {
-            setError(
-                "Please enter your email and password."
+            throw new Error(
+                "Login succeeded, but the session cookie was not verified. Check your API cookie and session configuration."
             );
-
-            return;
         }
 
-        setError("");
-        setLoading(true);
+        // Use the server-verified user information.
+        const user = sessionData.user || data.user;
 
-        try {
-            // ==========================================
-            // SEND LOGIN REQUEST
-            // ==========================================
-
-            const response = await fetch(
-                `${API_URL}/api/auth/login`,
-                {
-                    method: "POST",
-                    credentials: "include",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-
-                    body: JSON.stringify({
-                        email: formData.email,
-                        password: formData.password
-                    })
-                }
-            );
-            // ==========================================
-            // READ RESPONSE
-            // ==========================================
-
-            const responseText =
-                await response.text();
-
-            if (!responseText.trim()) {
-                throw new Error(
-                    `Server returned an empty response. HTTP ${response.status}`
-                );
-            }
-
-            let data;
-
-            try {
-                data = JSON.parse(
-                    responseText
-                );
-            } catch (jsonError) {
-                console.error(
-                    "INVALID JSON RESPONSE:",
-                    responseText
-                );
-
-                throw new Error(
-                    `Server returned invalid JSON. HTTP ${response.status}`
-                );
-            }
-
-            // ==========================================
-            // LOGIN FAILED
-            // ==========================================
-
-            if (
-                !response.ok ||
-                !data.success
-            ) {
-                setError(
-                    data.message ||
-                    "Invalid email or password."
-                );
-
-                return;
-            }
-
-            // ==========================================
-            // GET USER
-            // ==========================================
-
-            const user = data.user;
-            // ==========================================
-            // UPDATE APP USER
-            // ==========================================
-
-            if (onLogin) {
-                onLogin(user);
-            }
-
-            // ==========================================
-            // STORE USER
-            // ==========================================
-
-            if (rememberMe) {
-                localStorage.setItem(
-                    "hydrocontrol_user",
-                    JSON.stringify(user)
-                );
-
-                // Remove session copy if it exists
-                sessionStorage.removeItem(
-                    "hydrocontrol_user"
-                );
-            } else {
-                sessionStorage.setItem(
-                    "hydrocontrol_user",
-                    JSON.stringify(user)
-                );
-
-                // Remove local copy if it exists
-                localStorage.removeItem(
-                    "hydrocontrol_user"
-                );
-            }
-
-            // ==========================================
-            // GO TO DASHBOARD
-            // ==========================================
-
-            navigate("/dashboard");
-
-        } catch (error) {
-            console.error(
-                "LOGIN FETCH ERROR:",
-                error
-            );
-
-            setError(
-                `Unable to connect to the HydroControl server: ${error.message}`
-            );
-
-        } finally {
-            setLoading(false);
+        if (!user?.id) {
+            throw new Error("The server did not return a valid user.");
         }
-    };
+
+        // 3. Update the app's user state.
+        if (onLogin) {
+            onLogin(user);
+        }
+
+        // These storage entries are for UI convenience only.
+        // They do not replace server-side authentication.
+        if (rememberMe) {
+            localStorage.setItem(
+                "hydrocontrol_user",
+                JSON.stringify(user)
+            );
+            sessionStorage.removeItem("hydrocontrol_user");
+        } else {
+            sessionStorage.setItem(
+                "hydrocontrol_user",
+                JSON.stringify(user)
+            );
+            localStorage.removeItem("hydrocontrol_user");
+        }
+
+        // 4. Navigate only after verifying the session.
+        navigate("/dashboard", { replace: true });
+    } catch (error) {
+        console.error("LOGIN ERROR:", error);
+        setError(error.message || "Unable to log in.");
+    } finally {
+        setLoading(false);
+    }
+};
 
     // ==========================================
     // RENDER
@@ -229,7 +180,7 @@ function Login({ onLogin }) {
                         HEADER
                     ================================== */}
 
-                    <div class="login-card-header">
+                    <div className="login-card-header">
 
                         <div className="mobile-login-logo">
                             🌱

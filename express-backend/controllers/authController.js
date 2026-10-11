@@ -1,13 +1,18 @@
+
 const supabase = require("../config/supabase");
 const bcrypt = require("bcrypt");
 
 // =====================================================
 // LOGIN
+// POST /api/auth/login
 // =====================================================
 const login = async (req, res) => {
     try {
         const { email, password } = req.body || {};
 
+        // ---------------------------------------------
+        // VALIDATE INPUT
+        // ---------------------------------------------
         if (
             typeof email !== "string" ||
             typeof password !== "string" ||
@@ -22,8 +27,10 @@ const login = async (req, res) => {
 
         const normalizedEmail = email.trim().toLowerCase();
 
-        // Find administrator.
-        const { data: user, error } = await supabase
+        // ---------------------------------------------
+        // FIND ADMINISTRATOR
+        // ---------------------------------------------
+        const { data: user, error: userError } = await supabase
             .from("admin")
             .select(`
                 id,
@@ -36,8 +43,11 @@ const login = async (req, res) => {
             .eq("email", normalizedEmail)
             .maybeSingle();
 
-        if (error) {
-            console.error("SUPABASE LOGIN ERROR:", error);
+        if (userError) {
+            console.error(
+                "SUPABASE LOGIN ERROR:",
+                userError.message
+            );
 
             return res.status(500).json({
                 success: false,
@@ -45,22 +55,16 @@ const login = async (req, res) => {
             });
         }
 
-        if (!user) {
+        if (!user || !user.password_hash) {
             return res.status(401).json({
                 success: false,
                 message: "Invalid email or password."
             });
         }
 
-        if (!user.password_hash) {
-            console.error("Password hash is missing for:", user.email);
-
-            return res.status(500).json({
-                success: false,
-                message: "User password is not configured."
-            });
-        }
-
+        // ---------------------------------------------
+        // VERIFY PASSWORD
+        // ---------------------------------------------
         const passwordMatch = await bcrypt.compare(
             password,
             user.password_hash
@@ -73,10 +77,11 @@ const login = async (req, res) => {
             });
         }
 
-        const previousLastLogin = user.last_login;
         const currentLogin = new Date().toISOString();
 
-        // Update login timestamp.
+        // ---------------------------------------------
+        // UPDATE LAST LOGIN
+        // ---------------------------------------------
         const { error: updateError } = await supabase
             .from("admin")
             .update({
@@ -86,14 +91,23 @@ const login = async (req, res) => {
             .eq("id", user.id);
 
         if (updateError) {
-            console.error("LAST LOGIN UPDATE ERROR:", updateError);
+            // A timestamp update failure should not invalidate
+            // otherwise valid credentials.
+            console.error(
+                "LAST LOGIN UPDATE ERROR:",
+                updateError.message
+            );
         }
 
-
-        // Regenerate the session after successful authentication.
+        // ---------------------------------------------
+        // REGENERATE SESSION AFTER AUTHENTICATION
+        // ---------------------------------------------
         req.session.regenerate((regenerateError) => {
             if (regenerateError) {
-                console.error("SESSION REGENERATION ERROR:", regenerateError);
+                console.error(
+                    "SESSION REGENERATION ERROR:",
+                    regenerateError.message
+                );
 
                 return res.status(500).json({
                     success: false,
@@ -101,75 +115,83 @@ const login = async (req, res) => {
                 });
             }
 
+            // Store only the user details needed by the app.
             req.session.user = {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-        };
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role
+            };
 
-        req.session.save((error) => {
-            if (error) {
-                console.error("Session save failed:", error);
+            // -----------------------------------------
+            // SAVE SESSION BEFORE SENDING RESPONSE
+            // -----------------------------------------
+            req.session.save(async (saveError) => {
+                if (saveError) {
+                    console.error(
+                        "SESSION SAVE ERROR:",
+                        saveError.message
+                    );
 
-                return res.status(500).json({
-                    success: false,
-                    message: "Failed to create login session.",
-                });
-            }''
-
-            return res.status(200).json({
-                success: true,
-                message: "Login successful.",
-                user: req.session.user,
-            });
-        });
-        });
-
-
-        // Record the login in system_logs.
-        const { error: logError } = await supabase
-            .from("system_logs")
-            .insert({
-                user_id: user.id,
-                timestamp: currentLogin,
-                level: "SUCCESS",
-                category: "SYSTEM",
-                event: `${user.name} logged in successfully`,
-                device: "Web Admin Portal",
-                details: `Successful administrator login for ${user.email}`
-            });
-
-        if (logError) {
-            // Logging failure should not invalidate valid credentials.
-            console.error("LOGIN SYSTEM LOG ERROR:", logError);
-        }
-
-        // Ensure the session is saved before returning success.
-        req.session.save((sessionError) => {
-            if (sessionError) {
-                console.error("SESSION SAVE ERROR:", sessionError);
-
-                return res.status(500).json({
-                    success: false,
-                    message: "Could not establish login session."
-                });
-            }
-
-            return res.status(200).json({
-                success: true,
-                message: "Login successful.",
-                user: {
-                    id: user.id,
-                    name: user.name,
-                    email: user.email,
-                    role: user.role,
-                    last_login: previousLastLogin
+                    return res.status(500).json({
+                        success: false,
+                        message: "Failed to create login session."
+                    });
                 }
+
+                // -------------------------------------
+                // RECORD SUCCESSFUL LOGIN
+                // -------------------------------------
+                try {
+                    const { error: logError } = await supabase
+                        .from("system_logs")
+                        .insert({
+                            user_id: user.id,
+                            timestamp: currentLogin,
+                            level: "SUCCESS",
+                            category: "SYSTEM",
+                            event: `${user.name} logged in successfully`,
+                            device: "Web Admin Portal",
+                            details:
+                                `Successful administrator login for ${user.email}`
+                        });
+
+                    if (logError) {
+                        console.error(
+                            "LOGIN SYSTEM LOG ERROR:",
+                            logError.message
+                        );
+                    }
+                } catch (logError) {
+                    // Logging must not invalidate a saved session.
+                    console.error(
+                        "LOGIN SYSTEM LOG ERROR:",
+                        logError.message
+                    );
+                }
+
+                // -------------------------------------
+                // RETURN SUCCESS
+                // -------------------------------------
+                return res.status(200).json({
+                    success: true,
+                    message: "Login successful.",
+                    user: {
+                        id: user.id,
+                        name: user.name,
+                        email: user.email,
+                        role: user.role,
+                        last_login: currentLogin
+                    }
+                });
             });
         });
     } catch (error) {
         console.error("LOGIN ERROR:", error);
+
+        if (res.headersSent) {
+            return;
+        }
 
         return res.status(500).json({
             success: false,

@@ -20,9 +20,23 @@ const app = express();
 // SERVER CONFIGURATION
 // =====================================================
 
-if (process.env.NODE_ENV === "production") {
+const isProduction = process.env.NODE_ENV === "production";
+const PORT = process.env.PORT || 5000;
+
+if (isProduction) {
+    // Required when HTTPS is terminated by a trusted proxy.
     app.set("trust proxy", 1);
 }
+
+if (!process.env.SESSION_SECRET) {
+    throw new Error(
+        "SESSION_SECRET is missing from environment variables."
+    );
+}
+
+// =====================================================
+// CORS CONFIGURATION
+// =====================================================
 
 const allowedOrigins = new Set([
     "http://localhost:5173",
@@ -33,12 +47,16 @@ const allowedOrigins = new Set([
 
 const corsOptions = {
     origin(origin, callback) {
+        // Requests without Origin may include ESP32/API clients.
         if (!origin || allowedOrigins.has(origin)) {
             return callback(null, true);
         }
 
-        console.error(`Blocked CORS origin: ${origin}`);
-        return callback(new Error("Origin not allowed by CORS"));
+        console.error("Blocked CORS origin:", origin);
+
+        return callback(
+            new Error("Origin not allowed by CORS")
+        );
     },
 
     credentials: true,
@@ -63,59 +81,71 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// Handle CORS preflight requests before API routes.
+// Handle preflight requests before API routes.
 app.options(/.*/, cors(corsOptions));
 
-app.use(express.json());
+// =====================================================
+// REQUEST BODY PARSING
+// =====================================================
+
+app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // =====================================================
 // SESSION CONFIGURATION
 // =====================================================
 
-if (!process.env.SESSION_SECRET) {
-    throw new Error(
-        "SESSION_SECRET is missing from your environment configuration."
-    );
-}
-
 app.use(
     session({
         name: "hydrocontrol.sid",
         secret: process.env.SESSION_SECRET,
+
         resave: false,
         saveUninitialized: false,
         rolling: true,
 
         cookie: {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite:
-                process.env.NODE_ENV === "production"
-                    ? "none"
-                    : "lax",
-            maxAge: 1000 * 60 * 60 * 24
+
+            // Production must use HTTPS.
+            secure: isProduction,
+
+            // The frontend and API are subdomains of the
+            // same site, so Lax normally works.
+            sameSite: "lax",
+
+            path: "/",
+            maxAge: 24 * 60 * 60 * 1000
         }
     })
 );
 
+// IMPORTANT:
+// express-session's default MemoryStore is not suitable
+// for multi-instance production deployments. Configure a
+// shared persistent session store if you run multiple
+// API instances or require sessions to survive restarts.
+
 // =====================================================
-// AUTHENTICATION SESSION CHECK
+// SESSION AUTHENTICATION CHECK
 // GET /api/auth/session
 // =====================================================
 
 app.get("/api/auth/session", (req, res) => {
+    res.set("Cache-Control", "no-store");
+
     if (!req.session?.user?.id) {
         return res.status(401).json({
             success: false,
             authenticated: false,
-            message: "Authentication required."
+            message: "Authentication required. Please log in again."
         });
     }
 
     return res.status(200).json({
         success: true,
         authenticated: true,
+
         user: {
             id: req.session.user.id,
             name: req.session.user.name,
@@ -126,29 +156,60 @@ app.get("/api/auth/session", (req, res) => {
 });
 
 // =====================================================
+// OPTIONAL SESSION DEBUG ENDPOINT
+// GET /api/auth/session-debug
+//
+// Enable only temporarily when debugging.
+// Never expose session IDs, cookies, or secrets.
+// =====================================================
+
+if (!isProduction) {
+    app.get("/api/auth/session-debug", (req, res) => {
+        return res.json({
+            hasSession: Boolean(req.session),
+            hasUser: Boolean(req.session?.user),
+            hasUserId: Boolean(req.session?.user?.id),
+            authenticated: Boolean(req.session?.user?.id),
+            cookieReceived: Boolean(req.headers.cookie)
+        });
+    });
+}
+
+// =====================================================
 // API ROUTES
 // =====================================================
 
 app.use("/api/auth", authRoutes);
+
 app.use("/api/sensors", sensorRoutes);
+
 app.use("/api/health", healthRoutes);
+
 app.use("/api/system", systemLogsRoutes);
+
 app.use("/api/esp", espRoutes);
+
 app.use("/api/settings", settingsRoutes);
 
 // =====================================================
-// HEALTH CHECK
+// ROOT HEALTH CHECK
+// GET /
 // =====================================================
 
 app.get("/", (req, res) => {
-    res.json({
+    return res.status(200).json({
         success: true,
         message: "HydroControl API is running"
     });
 });
 
+// =====================================================
+// API HEALTH CHECK
+// GET /api
+// =====================================================
+
 app.get("/api", (req, res) => {
-    res.json({
+    return res.status(200).json({
         success: true,
         message: "HydroControl API is running smoothly!"
     });
@@ -159,45 +220,65 @@ app.get("/api", (req, res) => {
 // GET /api/test
 // =====================================================
 
-app.get("/api/test", async (req, res) => {
+app.get("/api/test", async (req, res, next) => {
     try {
         const { data, error } = await supabase
             .from("pumps")
             .select("*");
 
         if (error) {
-            console.error("Supabase error:", error);
+            console.error(
+                "Supabase database test failed:",
+                error.message
+            );
 
             return res.status(500).json({
                 success: false,
-                message: "Failed to retrieve pumps.",
-                error: error.message
+                message: "Failed to retrieve pumps."
             });
         }
 
-        return res.json({
+        return res.status(200).json({
             success: true,
             data
         });
     } catch (error) {
-        console.error("Database test error:", error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Internal server error."
-        });
+        return next(error);
     }
 });
 
 // =====================================================
-// ERROR HANDLER
+// 404 HANDLER
+// =====================================================
+
+app.use((req, res) => {
+    return res.status(404).json({
+        success: false,
+        message: "API endpoint not found.",
+        path: req.path
+    });
+});
+
+// =====================================================
+// GLOBAL ERROR HANDLER
 // =====================================================
 
 app.use((err, req, res, next) => {
-    console.error("API ERROR:", err.message);
+    console.error(
+        "API ERROR:",
+        err.message
+    );
 
     if (res.headersSent) {
         return next(err);
+    }
+
+    // Handle CORS errors without exposing internal details.
+    if (err.message === "Origin not allowed by CORS") {
+        return res.status(403).json({
+            success: false,
+            message: "Origin not allowed."
+        });
     }
 
     return res.status(500).json({
@@ -206,16 +287,20 @@ app.use((err, req, res, next) => {
     });
 });
 
-module.exports = app;
-
 // =====================================================
 // START SERVER
 // =====================================================
 
 if (require.main === module) {
-    const PORT = process.env.PORT || 5000;
-
     app.listen(PORT, () => {
-        console.log(`HydroControl API listening on port ${PORT}`);
+        console.log(
+            `HydroControl API listening on port ${PORT}`
+        );
+
+        console.log(
+            `Environment: ${isProduction ? "production" : "development"}`
+        );
     });
 }
+
+module.exports = app;
