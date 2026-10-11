@@ -43,28 +43,33 @@ function validDevice(req, res, next) {
 // ========================================
 
 function requireUser(req, res, next) {
-    const hasSession = Boolean(req.session);
-    const hasCookie = Boolean(req.headers.cookie);
-    const hasUser = Boolean(req.session?.user);
-    const hasUserId = Boolean(req.session?.user?.id);
+    // Express-session loads the session before this middleware.
+    const user = req.session?.user;
 
     console.log("[Pump Auth Check]", {
-        hasCookie,
-        hasSession,
-        hasUser,
-        hasUserId,
-        origin: req.get("origin")
+        sessionExists: Boolean(req.session),
+        authenticated: Boolean(user?.id),
+        sessionCookieReceived: Boolean(
+            req.headers.cookie
+                ?.split(";")
+                .some((cookie) =>
+                    cookie.trim().startsWith("hydrocontrol.sid=")
+                )
+        ),
+        origin: req.get("origin"),
+        path: req.originalUrl
     });
 
-    if (!hasUserId) {
+    if (!user?.id) {
         return res.status(401).json({
             success: false,
-            message: "Authentication required. Please log in again."
+            authenticated: false,
+            message: "Your session is missing or expired. Please log in again."
         });
     }
 
-    req.user = req.session.user.id;
-    return next();
+    req.user = user.id;
+    next();
 }
 
 
@@ -279,21 +284,20 @@ async function createPumpCommand(req, res, next) {
             });
         }
 
-        const { data: pending, error: pendingError } =
-            await supabase
-                .from("pump_commands")
-                .select("id")
-                .eq("device_id", device.id)
-                .in("status", ["pending", "processing"])
-                .limit(1);
+        const { count, error: queueError } = await supabase
+            .from("pump_commands")
+            .select("id", { count: "exact", head: true })
+            .eq("device_id", device.id)
+            .in("status", ["pending", "processing"]);
 
-        if (pendingError) throw pendingError;
+        if (queueError) throw queueError;
 
-        if (pending?.length) {
+        const MAX_QUEUED_COMMANDS = 3;
+
+        if ((count ?? 0) >= MAX_QUEUED_COMMANDS) {
             return res.status(409).json({
                 success: false,
-                message:
-                    "Another pump command is pending or running",
+                message: "Pump command queue is full. Wait for a pump cycle to finish."
             });
         }
 

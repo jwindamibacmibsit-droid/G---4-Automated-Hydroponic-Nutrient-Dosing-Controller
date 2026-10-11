@@ -94,26 +94,18 @@ app.use(express.urlencoded({ extended: true }));
 // =====================================================
 // SESSION CONFIGURATION
 // =====================================================
-
 app.use(
     session({
         name: "hydrocontrol.sid",
         secret: process.env.SESSION_SECRET,
-
         resave: false,
         saveUninitialized: false,
         rolling: true,
 
         cookie: {
             httpOnly: true,
-
-            // Production must use HTTPS.
             secure: isProduction,
-
-            // The frontend and API are subdomains of the
-            // same site, so Lax normally works.
             sameSite: "lax",
-
             path: "/",
             maxAge: 24 * 60 * 60 * 1000
         }
