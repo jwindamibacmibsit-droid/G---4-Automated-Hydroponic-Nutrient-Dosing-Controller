@@ -41,8 +41,22 @@ function validDevice(req, res, next) {
 // ========================================
 // 2. WEBSITE AUTHENTICATION
 // ========================================
+
 function requireUser(req, res, next) {
-    if (!req.session || !req.session.user || !req.session.user.id) {
+    const hasSession = Boolean(req.session);
+    const hasCookie = Boolean(req.headers.cookie);
+    const hasUser = Boolean(req.session?.user);
+    const hasUserId = Boolean(req.session?.user?.id);
+
+    console.log("[Pump Auth Check]", {
+        hasCookie,
+        hasSession,
+        hasUser,
+        hasUserId,
+        origin: req.get("origin")
+    });
+
+    if (!hasUserId) {
         return res.status(401).json({
             success: false,
             message: "Authentication required. Please log in again."
@@ -52,6 +66,7 @@ function requireUser(req, res, next) {
     req.user = req.session.user.id;
     return next();
 }
+
 
 // ========================================
 // 3. FIND REGISTERED DEVICE
