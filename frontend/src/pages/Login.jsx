@@ -1,14 +1,15 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
 import "../css/login.css";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
-function Login() {
+function Login({ onLogin }) {
     const navigate = useNavigate();
-    const { login } = useAuth();
+
+    // ==========================================
+    // STATE
+    // ==========================================
 
     const [showPassword, setShowPassword] = useState(false);
 
@@ -18,12 +19,15 @@ function Login() {
     });
 
     const [rememberMe, setRememberMe] = useState(false);
+
     const [error, setError] = useState("");
+
     const [loading, setLoading] = useState(false);
 
     // ==========================================
     // HANDLE INPUT
     // ==========================================
+
     const handleChange = (e) => {
         const { name, value } = e.target;
 
@@ -38,21 +42,22 @@ function Login() {
     // ==========================================
     // LOGIN
     // ==========================================
+
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        if (loading) return;
+        // ==========================================
+        // VALIDATION
+        // ==========================================
 
-        const email = formData.email.trim();
-        const password = formData.password;
+        if (
+            !formData.email ||
+            !formData.password
+        ) {
+            setError(
+                "Please enter your email and password."
+            );
 
-        if (!email || !password) {
-            setError("Please enter your email and password.");
-            return;
-        }
-
-        if (!API_URL) {
-            setError("The API URL is not configured.");
             return;
         }
 
@@ -60,75 +65,126 @@ function Login() {
         setLoading(true);
 
         try {
-            // 1. Authenticate and request a server session.
+            // ==========================================
+            // SEND LOGIN REQUEST
+            // ==========================================
+
             const response = await fetch(
-                `${API_URL.replace(/\/+$/, "")}/api/auth/login`,
+                `${API_URL}/api/auth/login`,
                 {
                     method: "POST",
                     credentials: "include",
                     headers: {
                         "Content-Type": "application/json"
                     },
+
                     body: JSON.stringify({
-                        email,
-                        password,
-                        rememberMe
+                        email: formData.email,
+                        password: formData.password
                     })
                 }
             );
+            // ==========================================
+            // READ RESPONSE
+            // ==========================================
 
-            const data = await response.json().catch(() => null);
+            const responseText =
+                await response.text();
 
-            // 2. Reject unsuccessful authentication.
+            if (!responseText.trim()) {
+                throw new Error(
+                    `Server returned an empty response. HTTP ${response.status}`
+                );
+            }
+
+            let data;
+
+            try {
+                data = JSON.parse(
+                    responseText
+                );
+            } catch (jsonError) {
+                console.error(
+                    "INVALID JSON RESPONSE:",
+                    responseText
+                );
+
+                throw new Error(
+                    `Server returned invalid JSON. HTTP ${response.status}`
+                );
+            }
+
+            // ==========================================
+            // LOGIN FAILED
+            // ==========================================
+
             if (
                 !response.ok ||
-                !data?.success ||
-                !data?.user
+                !data.success
             ) {
                 setError(
-                    data?.message ||
+                    data.message ||
                     "Invalid email or password."
                 );
+
                 return;
             }
 
-            // 3. Confirm the cookie can authenticate a new request.
-            const sessionResponse = await fetch(
-                `${API_URL.replace(/\/+$/, "")}/api/auth/session`,
-                {
-                    method: "GET",
-                    credentials: "include",
-                    cache: "no-store"
-                }
-            );
+            // ==========================================
+            // GET USER
+            // ==========================================
 
-            const sessionData = await sessionResponse
-                .json()
-                .catch(() => null);
+            const user = data.user;
+            // ==========================================
+            // UPDATE APP USER
+            // ==========================================
 
-            if (
-                !sessionResponse.ok ||
-                !sessionData?.authenticated ||
-                !sessionData?.user?.id
-            ) {
-                setError(
-                    "Login succeeded, but the session could not be verified. Check your cookie and server configuration."
+            if (onLogin) {
+                onLogin(user);
+            }
+
+            // ==========================================
+            // STORE USER
+            // ==========================================
+
+            if (rememberMe) {
+                localStorage.setItem(
+                    "hydrocontrol_user",
+                    JSON.stringify(user)
                 );
-                return;
+
+                // Remove session copy if it exists
+                sessionStorage.removeItem(
+                    "hydrocontrol_user"
+                );
+            } else {
+                sessionStorage.setItem(
+                    "hydrocontrol_user",
+                    JSON.stringify(user)
+                );
+
+                // Remove local copy if it exists
+                localStorage.removeItem(
+                    "hydrocontrol_user"
+                );
             }
 
-            // 4. Store the verified user in React state only.
-            login(sessionData.user);
+            // ==========================================
+            // GO TO DASHBOARD
+            // ==========================================
 
-            // 5. Navigate after session verification.
-            navigate("/dashboard", { replace: true });
+            navigate("/dashboard");
 
         } catch (error) {
-            console.error("LOGIN ERROR:", error);
+            console.error(
+                "LOGIN FETCH ERROR:",
+                error
+            );
 
             setError(
-                "Unable to connect to the HydroControl server. Check your network and API URL."
+                `Unable to connect to the HydroControl server: ${error.message}`
             );
+
         } finally {
             setLoading(false);
         }
@@ -137,18 +193,44 @@ function Login() {
     // ==========================================
     // RENDER
     // ==========================================
+
     return (
         <div className="login-page">
+
+            {/* =====================================
+                BACKGROUND
+            ====================================== */}
+
             <div className="login-background">
+
                 <div className="login-orb orb-one"></div>
+
                 <div className="login-orb orb-two"></div>
+
                 <div className="login-orb orb-three"></div>
+
                 <div className="login-grid"></div>
+
             </div>
 
+            {/* =====================================
+                LOGIN CONTAINER
+            ====================================== */}
+
             <main className="login-container">
+
+                {/* =================================
+                    LOGIN CARD
+                ================================== */}
+
                 <section className="login-card">
-                    <div className="login-card-header">
+
+                    {/* =================================
+                        HEADER
+                    ================================== */}
+
+                    <div class="login-card-header">
+
                         <div className="mobile-login-logo">
                             🌱
                         </div>
@@ -156,65 +238,112 @@ function Login() {
                         <h2 className="login-card-label">
                             ADMIN PORTAL
                         </h2>
+
                     </div>
 
+                    {/* =================================
+                        ERROR
+                    ================================== */}
+
                     {error && (
-                        <div className="login-error" role="alert">
-                            <span>⚠</span>
+                        <div className="login-error">
+
+                            <span>
+                                ⚠
+                            </span>
+
                             {error}
+
                         </div>
                     )}
 
-                    <form onSubmit={handleSubmit}>
+                    {/* =================================
+                        FORM
+                    ================================== */}
+
+                    <form
+                        onSubmit={handleSubmit}
+                    >
+
+                        {/* =============================
+                            EMAIL
+                        ============================== */}
+
                         <div className="form-group">
+
                             <label htmlFor="email">
                                 EMAIL ADDRESS
                             </label>
 
                             <div className="input-wrapper">
-                                <span className="input-icon">✉</span>
+
+                                <span className="input-icon">
+                                    ✉
+                                </span>
 
                                 <input
                                     id="email"
                                     name="email"
                                     type="email"
                                     placeholder="admin@hydrocontrol.com"
-                                    value={formData.email}
-                                    onChange={handleChange}
-                                    autoComplete="username"
-                                    required
-                                    disabled={loading}
+                                    value={
+                                        formData.email
+                                    }
+                                    onChange={
+                                        handleChange
+                                    }
+                                    autoComplete="email"
                                 />
+
                             </div>
+
                         </div>
 
+                        {/* =============================
+                            PASSWORD
+                        ============================== */}
+
                         <div className="form-group">
+
                             <div className="password-label-row">
+
                                 <label htmlFor="password">
                                     PASSWORD
                                 </label>
+
                             </div>
 
                             <div className="input-wrapper">
-                                <span className="input-icon">🔒</span>
+
+                                <span className="input-icon">
+                                    🔒
+                                </span>
 
                                 <input
                                     id="password"
                                     name="password"
-                                    type={showPassword ? "text" : "password"}
+                                    type={
+                                        showPassword
+                                            ? "text"
+                                            : "password"
+                                    }
                                     placeholder="Enter your password"
-                                    value={formData.password}
-                                    onChange={handleChange}
+                                    value={
+                                        formData.password
+                                    }
+                                    onChange={
+                                        handleChange
+                                    }
                                     autoComplete="current-password"
-                                    required
-                                    disabled={loading}
                                 />
 
                                 <button
                                     type="button"
                                     className="password-toggle"
                                     onClick={() =>
-                                        setShowPassword((previous) => !previous)
+                                        setShowPassword(
+                                            !showPassword
+                                        )
                                     }
                                     aria-label={
                                         showPassword
@@ -222,45 +351,85 @@ function Login() {
                                             : "Show password"
                                     }
                                 >
-                                    {showPassword ? "--" : "👁"}
+                                    {showPassword
+                                        ? "--"
+                                        : "👁"}
                                 </button>
+
                             </div>
+
                         </div>
 
+                        {/* =============================
+                            OPTIONS
+                        ============================== */}
+
                         <div className="login-options">
+
                             <label className="remember-option">
+
                                 <input
                                     type="checkbox"
-                                    checked={rememberMe}
-                                    onChange={(e) =>
-                                        setRememberMe(e.target.checked)
+                                    checked={
+                                        rememberMe
                                     }
-                                    disabled={loading}
+                                    onChange={(e) =>
+                                        setRememberMe(
+                                            e.target.checked
+                                        )
+                                    }
                                 />
 
                                 <span className="custom-checkbox"></span>
+
                                 Remember me
+
                             </label>
+
                         </div>
+
+                        {/* =============================
+                            LOGIN BUTTON
+                        ============================== */}
 
                         <button
                             type="submit"
                             className="login-button"
                             disabled={loading}
                         >
+
                             <span className="login-text">
-                                {loading ? "Signing In..." : "Sign In"}
+
+                                {loading
+                                    ? "Signing In..."
+                                    : "Sign In"}
+
                             </span>
 
-                            <span className="login-arrow">→</span>
+                            <span className="login-arrow">
+                                →
+                            </span>
+
                         </button>
+
                     </form>
 
+                    {/* =================================
+                        DIVIDER
+                    ================================== */}
+
                     <div className="login-divider">
-                        <span>SECURE ACCESS</span>
+
+                        <span>
+                            SECURE ACCESS
+                        </span>
+
                     </div>
+
                 </section>
+
             </main>
+
         </div>
     );
 }
