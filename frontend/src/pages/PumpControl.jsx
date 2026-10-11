@@ -56,113 +56,55 @@ function PumpControl() {
 
     // A relay can switch a pump on or off, but cannot
     // control its speed without a suitable motor controller.
-    const sendPumpCommand = async (pump, durationMs = duration) => {
-        if (autoMode) {
-            setSystemMessage(
-                "Switch to Manual mode to issue manual commands."
-            );
-            return false;
-        }
-
-        if (
-            !pump ||
-            !Number.isFinite(Number(durationMs)) ||
-            durationMs < 100 ||
-            durationMs > MAX_DURATION_MS
-        ) {
-            setSystemMessage(
-                "Pump duration must be between 100 and 5000 ms."
-            );
-            return false;
-        }
-
-        if (
-            commands[pump.id]?.status === "sending" ||
-            sendingAll
-        ) {
-            return false;
-        }
-
-        setCommands((previous) => ({
-            ...previous,
-            [pump.id]: {
-                status: "sending",
-                message: "Sending command...",
-            },
-        }));
-
-        setErrors((previous) => ({
-            ...previous,
-            [pump.id]: "",
-        }));
-
-        setSystemMessage("");
-
-        try {
-            const response = await fetch(
-                `${API_BASE_URL}${COMMAND_ENDPOINT}`,
-                {
-                    method: "POST",
-                    credentials: "include",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        device_uid: DEVICE_UID,
-                        pump: pump.command,
-                        duration_ms: Number(durationMs),
-                    }),
-                }
-            );
-
-            const result = await response.json().catch(() => ({}));
-
-            if (!response.ok || result.success === false) {
-                throw new Error(
-                    result.message ||
-                    `Server request failed (${response.status}).`
-                );
+async function sendPumpCommand(pump, duration_ms) {
+    try {
+        const response = await fetch(
+            `${API_BASE_URL}/api/esp/pumps/commands`,
+            {
+                method: "POST",
+                credentials: "include",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    device_uid: "ESP32-HYDRO-001",
+                    pump,
+                    duration_ms
+                })
             }
+        );
 
-            setCommands((previous) => ({
-                ...previous,
-                [pump.id]: {
-                    status: "pending",
-                    message: "Command accepted; awaiting ESP32.",
-                    commandId:
-                        result.data?.id ??
-                        result.command?.id ??
-                        result.id ??
-                        null,
-                },
-            }));
+        const data = await response.json().catch(() => ({}));
 
-            setSystemMessage(
-                `${pump.name}: command accepted by the API.`
+        // Administrator authentication failure
+        if (response.status === 401) {
+            setMessage(
+                "Your session is missing or expired. Please log in again."
             );
-
-            return true;
-        } catch (error) {
-            setCommands((previous) => ({
-                ...previous,
-                [pump.id]: {
-                    status: "failed",
-                    message: error.message,
-                },
-            }));
-
-            setErrors((previous) => ({
-                ...previous,
-                [pump.id]: error.message,
-            }));
-
-            setSystemMessage(
-                `Failed to send ${pump.name} command: ${error.message}`
-            );
-
-            return false;
+            return;
         }
-    };
+
+        // ESP32 offline or unavailable
+        if (
+            response.status === 503 ||
+            data.code === "DEVICE_OFFLINE"
+        ) {
+            setMessage("Waiting for ESP32 response...");
+            return;
+        }
+
+        if (!response.ok) {
+            setMessage(data.message || "Failed to send pump command.");
+            return;
+        }
+
+        // Command accepted; ESP32 may not have executed it yet.
+        setMessage("Pump command sent. Waiting for ESP32 response...");
+    } catch (error) {
+        // Network/server connection failure, not necessarily ESP32 offline.
+        setMessage("Unable to contact the server. Please try again.");
+    }
+}
 
     const runPump = (pump) => {
         return sendPumpCommand(pump, duration);

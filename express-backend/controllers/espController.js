@@ -253,6 +253,7 @@ async function getLatestSensorData(req, res, next) {
 // POST /api/esp/pumps/commands
 // Requires website authentication.
 // ========================================
+
 async function createPumpCommand(req, res, next) {
     try {
         const { pump, duration_ms } = req.body || {};
@@ -275,18 +276,48 @@ async function createPumpCommand(req, res, next) {
             });
         }
 
+        // 1. Find the registered ESP32.
         const device = await findDevice();
 
         if (!device) {
             return res.status(404).json({
                 success: false,
-                message: "Device is not registered",
+                code: "DEVICE_NOT_REGISTERED",
+                message: "ESP32 device is not registered.",
             });
         }
 
+        // 2. Check ESP32 status and heartbeat freshness.
+        const lastSeenMs = device.last_seen
+            ? new Date(device.last_seen).getTime()
+            : 0;
+
+        const heartbeatAge = Date.now() - lastSeenMs;
+        const OFFLINE_THRESHOLD_MS = 30_000;
+
+        const isOnline =
+            device.status === "online" &&
+            Number.isFinite(lastSeenMs) &&
+            lastSeenMs > 0 &&
+            heartbeatAge >= 0 &&
+            heartbeatAge <= OFFLINE_THRESHOLD_MS;
+
+        if (!isOnline) {
+            return res.status(503).json({
+                success: false,
+                code: "DEVICE_OFFLINE",
+                device_status: "offline",
+                message: "Waiting for ESP32 response...",
+            });
+        }
+
+        // 3. Check the command queue limit.
         const { count, error: queueError } = await supabase
             .from("pump_commands")
-            .select("id", { count: "exact", head: true })
+            .select("id", {
+                count: "exact",
+                head: true,
+            })
             .eq("device_id", device.id)
             .in("status", ["pending", "processing"]);
 
@@ -297,10 +328,13 @@ async function createPumpCommand(req, res, next) {
         if ((count ?? 0) >= MAX_QUEUED_COMMANDS) {
             return res.status(409).json({
                 success: false,
-                message: "Pump command queue is full. Wait for a pump cycle to finish."
+                code: "QUEUE_FULL",
+                message:
+                    "Pump command queue is full. Wait for a pump cycle to finish.",
             });
         }
 
+        // 4. Insert the command only when the ESP32 is online.
         const { data, error } = await supabase
             .from("pump_commands")
             .insert({
@@ -316,13 +350,15 @@ async function createPumpCommand(req, res, next) {
 
         return res.status(201).json({
             success: true,
-            message: "Pump command queued",
+            message: "Pump command queued. Waiting for ESP32 response...",
+            device_status: "online",
             data,
         });
     } catch (error) {
         next(error);
     }
 }
+
 
 // ========================================
 // 7. ESP32 POLLS FOR PUMP COMMAND
